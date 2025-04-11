@@ -48,7 +48,7 @@ type ParseStringResult struct {
 
 // StringToBytes converts string to byte slice with length prefix
 func StringToBytes(str string) []byte {
-	length := IntToBytes(int32(len(str)))
+	length := IntToBytes(uint32(int32(len(str))))
 	strBytes := []byte(str)
 	return append(length, strBytes...)
 }
