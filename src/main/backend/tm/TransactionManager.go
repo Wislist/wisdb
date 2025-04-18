@@ -29,19 +29,19 @@ const (
 )
 
 type TransactionManager interface {
-	Begin() int64
-	Commit(xid int64)
-	Abort(xid int64)
-	IsActive(xid int64) bool
-	IsCommitted(xid int64) bool
-	IsAborted(xid int64) bool
+	Begin() uint64
+	Commit(xid uint64)
+	Abort(xid uint64)
+	IsActive(xid uint64) bool
+	IsCommitted(xid uint64) bool
+	IsAborted(xid uint64) bool
 	Close()
 }
 
 type transactionManager struct {
 	file *os.File
 
-	xidCounter  int64
+	xidCounter  uint64
 	counterLock sync.Mutex
 }
 
@@ -93,7 +93,7 @@ func (tm *transactionManager) checkXIDCounter() {
 	if err != nil {
 		panic(err)
 	}
-	tm.xidCounter = utils.BytesToLong(header)
+	tm.xidCounter = utils.BytesToUint64(header)
 
 	end := xidPosition(tm.xidCounter + 1)
 
@@ -102,12 +102,12 @@ func (tm *transactionManager) checkXIDCounter() {
 	}
 }
 
-func xidPosition(xid int64) int64 {
-	return LEN_XID_HEADER_LENGTH + (xid-1)*XID_FIELD_SIZE
+func xidPosition(xid uint64) int64 {
+	return int64(LEN_XID_HEADER_LENGTH + (xid-1)*XID_FIELD_SIZE)
 }
 
 // 更新事务状态 updateXID
-func (t *transactionManager) updateXID(xid int64, status byte) {
+func (t *transactionManager) updateXID(xid uint64, status byte) {
 	offset := xidPosition(xid)
 	tmp := make([]byte, XID_FIELD_SIZE)
 	tmp[0] = status
@@ -124,7 +124,7 @@ func (t *transactionManager) updateXID(xid int64, status byte) {
 // XID+1 并更新XID Header incrXIDCounter
 func (t *transactionManager) incrXIDCounter() {
 	t.xidCounter++
-	buf := utils.LongToBytes(t.xidCounter)
+	buf := utils.Uint64ToBytes(t.xidCounter)
 	_, err := t.file.WriteAt(buf, 0)
 	if err != nil {
 		panic(err)
@@ -139,7 +139,7 @@ func (t *transactionManager) incrXIDCounter() {
 *
 返回一个XID作为Header
 */
-func (t *transactionManager) Begin() int64 {
+func (t *transactionManager) Begin() uint64 {
 	//先上锁
 	t.counterLock.Lock()
 	defer t.counterLock.Unlock()
@@ -155,7 +155,7 @@ func (t *transactionManager) Begin() int64 {
 commit事务
 */
 
-func (t *transactionManager) Commit(xid int64) {
+func (t *transactionManager) Commit(xid uint64) {
 	//表示提交
 	t.counterLock.Lock()
 	defer t.counterLock.Unlock()
@@ -166,14 +166,14 @@ func (t *transactionManager) Commit(xid int64) {
 *
 回滚事务
 */
-func (t *transactionManager) Abort(xid int64) {
+func (t *transactionManager) Abort(xid uint64) {
 	t.updateXID(xid, byte(FIELD_TRAN_ABORTED))
 }
 
 /*
 *checkXID 检查这个xid的status
  */
-func (t *transactionManager) checkXID(xid int64, status byte) bool {
+func (t *transactionManager) checkXID(xid uint64, status byte) bool {
 	offset := xidPosition(xid)
 	tmp := make([]byte, XID_FIELD_SIZE)
 	_, err := t.file.ReadAt(tmp, offset)
@@ -183,21 +183,21 @@ func (t *transactionManager) checkXID(xid int64, status byte) bool {
 	return tmp[0] == status
 }
 
-func (t *transactionManager) IsActive(xid int64) bool {
+func (t *transactionManager) IsActive(xid uint64) bool {
 	if xid == SUPER_XID {
 		return false
 	}
 	return t.checkXID(xid, FIELD_TRAN_ACTIVE)
 }
 
-func (t *transactionManager) IsCommitted(xid int64) bool {
+func (t *transactionManager) IsCommitted(xid uint64) bool {
 	if xid == SUPER_XID {
 		return true
 	}
 	return t.checkXID(xid, FIELD_TRAN_COMMITTED)
 }
 
-func (t *transactionManager) IsAborted(xid int64) bool {
+func (t *transactionManager) IsAborted(xid uint64) bool {
 	if xid == SUPER_XID {
 		return true
 	}
