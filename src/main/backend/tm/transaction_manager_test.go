@@ -16,13 +16,13 @@ const (
 )
 
 func setupConcurrentTest() tm.TransactionManager {
-	os.Remove(TEST_FILE)
+	os.Remove(TEST_FILE + tm.XID_SUFFIX)
 	return tm.Create(TEST_FILE)
 }
 
-func cleanupConcurrentTest(tm tm.TransactionManager) {
-	tm.Close()
-	os.Remove(TEST_FILE)
+func cleanupConcurrentTest(mgr tm.TransactionManager) {
+	mgr.Close()
+	os.Remove(TEST_FILE + tm.XID_SUFFIX)
 }
 
 func TestConcurrentTransactions(t *testing.T) {
@@ -40,17 +40,17 @@ func TestConcurrentTransactions(t *testing.T) {
 			switch op {
 			case 0: // Begin + Commit
 				xid := a.Begin()
-				statusMap.Store(xid, tm.FIELD_TRAN_ACTIVE)
+				statusMap.Store(xid, byte(tm.FIELD_TRAN_ACTIVE))
 				time.Sleep(time.Duration(r.Intn(10)) * time.Millisecond) // 模拟处理延迟
 				a.Commit(xid)
-				statusMap.Store(xid, tm.FIELD_TRAN_COMMITTED)
+				statusMap.Store(xid, byte(tm.FIELD_TRAN_COMMITTED))
 
 			case 1: // Begin + Abort
 				xid := a.Begin()
-				statusMap.Store(xid, tm.FIELD_TRAN_ACTIVE)
+				statusMap.Store(xid, byte(tm.FIELD_TRAN_ACTIVE))
 				time.Sleep(time.Duration(r.Intn(10)) * time.Millisecond)
 				a.Abort(xid)
-				statusMap.Store(xid, tm.FIELD_TRAN_ABORTED)
+				statusMap.Store(xid, byte(tm.FIELD_TRAN_ABORTED))
 
 			case 2: // 随机验证已有事务状态
 				if xid, ok := randomExistingXid(&statusMap, r); ok {
@@ -68,20 +68,19 @@ func TestConcurrentTransactions(t *testing.T) {
 
 	// 最终一致性验证
 	statusMap.Range(func(key, value interface{}) bool {
-		xid := key.(int64)
-		_ = value.(byte)
+		xid := key.(tm.XID)
 		checkTransactionState(t, a, xid, &statusMap)
 		return true
 	})
 }
 
 // 辅助函数：随机获取一个已存在的事务ID
-func randomExistingXid(m *sync.Map, r *rand.Rand) (int64, bool) {
-	var xid int64
+func randomExistingXid(m *sync.Map, r *rand.Rand) (tm.XID, bool) {
+	var xid tm.XID
 	found := false
 	m.Range(func(key, _ interface{}) bool {
 		if r.Intn(2) == 0 { // 50% 概率选择当前key
-			xid = key.(int64)
+			xid = key.(tm.XID)
 			found = true
 			return false
 		}
@@ -91,8 +90,9 @@ func randomExistingXid(m *sync.Map, r *rand.Rand) (int64, bool) {
 }
 
 // 辅助函数：验证事务状态是否匹配
-func checkTransactionState(t *testing.T, tmd tm.TransactionManager, xid int64, m *sync.Map) {
-	expectedStatus, _ := m.Load(xid)
+func checkTransactionState(t *testing.T, tmd tm.TransactionManager, xid tm.XID, m *sync.Map) {
+	v, _ := m.Load(xid)
+	expectedStatus := v.(byte)
 	var actualStatus byte
 	switch {
 	case tmd.IsActive(xid):
@@ -102,11 +102,11 @@ func checkTransactionState(t *testing.T, tmd tm.TransactionManager, xid int64, m
 	case tmd.IsAborted(xid):
 		actualStatus = tm.FIELD_TRAN_ABORTED
 	default:
-		t.Fatalf("xid %d has no valid state", xid)
+		t.Fatalf("xid %v has no valid state", xid)
 	}
 
 	if actualStatus != expectedStatus {
-		t.Errorf("xid %d state mismatch: expected %d, got %d",
+		t.Errorf("xid %v state mismatch: expected %d, got %d",
 			xid, expectedStatus, actualStatus)
 	}
 }

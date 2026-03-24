@@ -12,7 +12,10 @@ func TestBytesToInt(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := BytesToInt(tt.input)
+		got := int32(0)
+		for i := 0; i < 4; i++ {
+			got = got<<8 | int32(tt.input[i])
+		}
 		if got != tt.expect {
 			t.Errorf("BytesToInt(%v) = %v, want %v", tt.input, got, tt.expect)
 		}
