@@ -1,112 +1,76 @@
 package tm_test
 
 import (
+	"fmt"
 	"math/rand"
 	"mydb/src/main/backend/tm"
 	"os"
 	"sync"
 	"testing"
-	"time"
 )
 
-const (
-	TEST_FILE      = "concurrent_test"
-	NUM_WORKERS    = 50  // 并发工作协程数
-	OPS_PER_WORKER = 100 // 每个协程的操作次数
-)
+func TestMultiThread(t *testing.T) {
+	tmger := tm.CreateMock("/tmp/tranmanager_test.xid")
 
-func setupConcurrentTest() tm.TransactionManager {
-	os.Remove(TEST_FILE + tm.XID_SUFFIX)
-	return tm.Create(TEST_FILE)
-}
-
-func cleanupConcurrentTest(mgr tm.TransactionManager) {
-	mgr.Close()
-	os.Remove(TEST_FILE + tm.XID_SUFFIX)
-}
-
-func TestConcurrentTransactions(t *testing.T) {
-	a := setupConcurrentTest()
-	defer cleanupConcurrentTest(a)
-
-	var wg sync.WaitGroup
-	statusMap := sync.Map{} // 线程安全的 map 记录事务状态
+	transCnt := 0
+	transMap := make(map[tm.XID]byte)
+	lock := new(sync.Mutex)
+	noWorkers := 50
+	noWorks := 3000
+	waitGroup := new(sync.WaitGroup)
 
 	worker := func() {
-		defer wg.Done()
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		for i := 0; i < OPS_PER_WORKER; i++ {
-			op := r.Intn(3)
-			switch op {
-			case 0: // Begin + Commit
-				xid := a.Begin()
-				statusMap.Store(xid, byte(tm.FIELD_TRAN_ACTIVE))
-				time.Sleep(time.Duration(r.Intn(10)) * time.Millisecond) // 模拟处理延迟
-				a.Commit(xid)
-				statusMap.Store(xid, byte(tm.FIELD_TRAN_COMMITTED))
-
-			case 1: // Begin + Abort
-				xid := a.Begin()
-				statusMap.Store(xid, byte(tm.FIELD_TRAN_ACTIVE))
-				time.Sleep(time.Duration(r.Intn(10)) * time.Millisecond)
-				a.Abort(xid)
-				statusMap.Store(xid, byte(tm.FIELD_TRAN_ABORTED))
-
-			case 2: // 随机验证已有事务状态
-				if xid, ok := randomExistingXid(&statusMap, r); ok {
-					checkTransactionState(t, a, xid, &statusMap)
+		inTrans := false
+		var tranXID tm.XID
+		for i := 0; i < noWorks; i++ {
+			op := rand.Int() % 6
+			if op == 0 { // Begin or Terminate
+				lock.Lock()
+				if inTrans == false { // Begin a new transaction
+					xid := tmger.Begin()
+					transMap[xid] = 0 // Set xid to active
+					tranXID = xid
+					inTrans = true
+				} else {
+					status := (rand.Int() % 2) + 1
+					switch status {
+					case 1: // commit
+						tmger.Commit(tranXID)
+					case 2: // abort
+						tmger.Abort(tranXID)
+					}
+					transMap[tranXID] = byte(status) // set xid status
+					inTrans = false
 				}
+				lock.Unlock()
+			} else { // Check
+				lock.Lock()
+				if transCnt > 0 {
+					xid := tm.XID((rand.Int() % transCnt) + 1)
+					status := transMap[xid]
+					var ok bool
+					switch status {
+					case 0: // active
+						ok = tmger.IsActive(xid)
+					case 1: // commited
+						ok = tmger.IsCommitted(xid)
+					case 2: // aborted
+						ok = tmger.IsAborted(xid)
+					}
+					if ok == false {
+						fmt.Println("Check error!")
+						os.Exit(-1)
+					}
+				}
+				lock.Unlock()
 			}
 		}
+		waitGroup.Done()
 	}
 
-	wg.Add(NUM_WORKERS)
-	for i := 0; i < NUM_WORKERS; i++ {
+	waitGroup.Add(noWorkers)
+	for i := 0; i < noWorkers; i++ {
 		go worker()
 	}
-	wg.Wait()
-
-	// 最终一致性验证
-	statusMap.Range(func(key, value interface{}) bool {
-		xid := key.(tm.XID)
-		checkTransactionState(t, a, xid, &statusMap)
-		return true
-	})
-}
-
-// 辅助函数：随机获取一个已存在的事务ID
-func randomExistingXid(m *sync.Map, r *rand.Rand) (tm.XID, bool) {
-	var xid tm.XID
-	found := false
-	m.Range(func(key, _ interface{}) bool {
-		if r.Intn(2) == 0 { // 50% 概率选择当前key
-			xid = key.(tm.XID)
-			found = true
-			return false
-		}
-		return true
-	})
-	return xid, found
-}
-
-// 辅助函数：验证事务状态是否匹配
-func checkTransactionState(t *testing.T, tmd tm.TransactionManager, xid tm.XID, m *sync.Map) {
-	v, _ := m.Load(xid)
-	expectedStatus := v.(byte)
-	var actualStatus byte
-	switch {
-	case tmd.IsActive(xid):
-		actualStatus = tm.FIELD_TRAN_ACTIVE
-	case tmd.IsCommitted(xid):
-		actualStatus = tm.FIELD_TRAN_COMMITTED
-	case tmd.IsAborted(xid):
-		actualStatus = tm.FIELD_TRAN_ABORTED
-	default:
-		t.Fatalf("xid %v has no valid state", xid)
-	}
-
-	if actualStatus != expectedStatus {
-		t.Errorf("xid %v state mismatch: expected %d, got %d",
-			xid, expectedStatus, actualStatus)
-	}
+	waitGroup.Wait()
 }

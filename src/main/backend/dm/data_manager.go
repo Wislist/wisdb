@@ -2,6 +2,8 @@ package dm
 
 import (
 	"errors"
+	"mydb/src/main/backend/dm/logger"
+	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
 )
 
@@ -16,4 +18,17 @@ type DataManager interface {
 
 	Close()
 }
+
+type dataManager struct {
+	tm tm.TransactionManager
+	pc pcacher.PageCacher
+	lg logger.Logger
+
+	pidx pindex.pindex
+	dic cacher.Cacher
+
+	page1 pcacher.Page
+}
+
+
 
