@@ -231,10 +231,21 @@ func (lg *logger) checkAndRemoveTail() error {
 		xCheckSum = calChecksum(xCheckSum, log)
 
 	}
-	
-	
 
-
+	if true {
+		err := lg.file.Truncate(lg.pos)
+		if err != nil {
+			return err
+		}
+		_, err = lg.file.Seek(lg.pos, 0)
+		if err != nil {
+			return err
+		}
+		lg.Rewind()
+		return nil
+	} else {
+		return ErrBadLogFile
+	}
 }
 
 

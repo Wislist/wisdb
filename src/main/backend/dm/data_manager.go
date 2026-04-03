@@ -27,14 +27,14 @@ type dataManager struct {
 	pc pcacher.Pcacher
 	lg logger.Logger
 
-	pidx pindex.PIndex
+	pidx pindex.Pindex
 	dic  cacher.Cacher
 
 	page1 pcacher.Page
 }
 
 func NewDataManager(pc pcacher.Pcacher, lg logger.Logger, tm tm.TransactionManager) *dataManager {
-	pidx := pindex.NewPIndex()
+	pidx := pindex.NewPindex()
 	dm := &dataManager{
 		tm:   tm,
 		pc:   pc,

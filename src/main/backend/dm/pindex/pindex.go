@@ -13,7 +13,7 @@ const (
 	_THRESHOLD = pcacher.PAGE_SIZE / _NO_INTERVAL
 )
 
-type PIndex interface {
+type Pindex interface {
 	/*
 		Add将该键值对添加到Pindex中
 	*/
@@ -25,7 +25,7 @@ type PIndex interface {
 	Select(spaces int) (pcacher.Pgno , int , bool)
 }
 
-type pIndex struct {
+type pindex struct {
 	lock sync.Mutex
 	lists [_NO_INTERVAL + 1]list.List
 }
@@ -35,13 +35,13 @@ type pair struct {
 	freeSpace 	int
 }
 
-func NewPIndex() *pIndex {
-	return &pIndex{
+func NewPindex() *pindex {
+	return &pindex{
 		lists: [_NO_INTERVAL + 1]list.List{},
 	}
 }
 
-func (pi *pIndex) Add(pgno pcacher.Pgno, freeSpace int) {
+func (pi *pindex) Add(pgno pcacher.Pgno, freeSpace int) {
 	pi.lock.Lock()
 	defer pi.lock.Unlock()
 
@@ -49,7 +49,7 @@ func (pi *pIndex) Add(pgno pcacher.Pgno, freeSpace int) {
 	pi.lists[no].PushBack(&pair{pgno,freeSpace})
 }
 
-func (pi *pIndex) Select(spaceSize int) (pcacher.Pgno,int,bool){
+func (pi *pindex) Select(spaceSize int) (pcacher.Pgno,int,bool){
 	pi.lock.Lock()
 	defer pi.lock.Unlock()
 

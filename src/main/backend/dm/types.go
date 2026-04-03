@@ -9,9 +9,8 @@ type Offset uint16
 
 func UUID2Address(uid utils.UUID) (pcacher.Pgno, Offset) {
 	u := uint64(uid)
-	offset := Offset(u % ((1 << 16) - 1))
-	u >>= 32
-	pgno := pcacher.Pgno(u & ((1 << 32) - 1))
+	offset := Offset(u & ((1 << 16) - 1))
+	pgno := pcacher.Pgno((u >> 32) & ((1 << 32) - 1))
 	return pgno, offset
 }
 
