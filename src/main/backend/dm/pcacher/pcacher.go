@@ -12,7 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"mydb/src/main/backend/dm/cacher"
+	"mydb/src/main/backend/utils/cacher"
 )
 
 var (
@@ -26,9 +26,14 @@ const (
 	SUFFIX_DB = ".db"
 )
 
-type PageCacher interface {
-	NewPage(pageID utils.UUID) ([]byte, error)
-	GetPage(pageID utils.UUID, data []byte) error
+type Pcacher interface {
+	/*
+	* NewPage 创建一个新的页面
+	* initData 初始化页面的内容
+	* 返回新页面的页号
+	*/
+	NewPage(initData []byte) Pgno
+	GetPage(pgno Pgno) (Page,error)
 	Close()	
 
 	/*recobery的时候才会被调用*/
@@ -75,15 +80,13 @@ func newPcacher(file *os.File, mem int64) *pcacher {
 	size := info.Size()
 
 	p := new(pcacher)
-	options := new (cacher.Options)
+	options := new(cacher.Options)
 	options.Get = p.getForCacher
 	options.MaxHandles = uint32(mem / PAGE_SIZE)
 	options.Release = p.releaseForCacher
-	//回调给cacher处理 创建通用缓存器
 	c := cacher.NewCacher(options)
 	p.c = c
 	p.file = file
-
 	p.noPages = uint32(size / PAGE_SIZE)
 
 	return p

@@ -16,7 +16,7 @@ func UUID2Pgno(uuid utils.UUID) Pgno {
 	return Pgno(uuid)
 }
 
-func PutPage(buf []byte, pgno Pgno) {
+func PutPgno(buf []byte, pgno Pgno) {
 	utils.PutUint32(buf, uint32(pgno))
 }
 

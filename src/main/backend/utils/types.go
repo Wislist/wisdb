@@ -6,15 +6,15 @@ type UUID uint64
 
 
 var (
-	INF UUID = UUID(0xFFFFFFFFFFFFFFFF)
-	NilUUID UUID = UUID(0x0000000000000000)
+	INF UUID = (1 << 63) - 1 + (1 << 63)
+	NilUUID UUID = 0
 )
 
 const (
-	UUID_SIZE = 8
+	LEN_UUID = 8
 )
 
-func PutUUID(uuid UUID, buf []byte) {
+func PutUUID(buf []byte,uuid UUID) {
 	PutUint64(buf, uint64(uuid))
 }
 func GetUUID(buf []byte) UUID {

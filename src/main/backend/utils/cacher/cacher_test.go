@@ -69,6 +69,7 @@ func TestCacher_ConcurrentSingleUID(t *testing.T) {
 	}
 }
 
+//并发写入缓存
 func TestCacher_ReadWrite(t *testing.T) {
 	c, _, _ := newTestCacher(0)
 
@@ -106,6 +107,7 @@ func TestCacher_ReadWrite(t *testing.T) {
 	c.Release(uid)
 }
 
+//并发删除缓存，然后重新创建
 func TestCacher_DeleteAndRecreate(t *testing.T) {
 	c, createCount, releaseCount := newTestCacher(0)
 

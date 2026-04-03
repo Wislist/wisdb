@@ -31,7 +31,7 @@ type Options struct {
 	Get func(uid utils.UUID) (interface{}, error)
 
 	//释放资源
-	Release func(uid utils.UUID, obj interface{})
+	Release func(underlying interface{})
 
 	//允许的最大资源数
 	MaxHandles uint32
@@ -107,6 +107,17 @@ func (c *cacher) Get(uid utils.UUID) (interface{}, error) {
 	return underlying, nil
 }
 
+func (c *cacher) Close() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	//TODO: 如果还有c.getting不为空？
+	for uid , h := range c.cache {
+		c.options.Release(h)
+		delete(c.refs, uid)
+		delete(c.cache, uid)
+	}
+}
+
 func (c *cacher) Release(uid utils.UUID) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -118,7 +129,7 @@ func (c *cacher) Release(uid utils.UUID) {
 			如果Release被异步处理，那么有可能在Release完成之前，就有新的线程Get这个资源
 			那么新线程得到的将会是未被更新的新资源
 		*/
-		c.options.Release(uid, underlying)
+		c.options.Release(underlying)
 		delete(c.refs,uid)
 		delete(c.cache, uid)
 		c.count--

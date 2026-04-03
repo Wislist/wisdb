@@ -5,12 +5,12 @@ import "mydb/src/main/backend/utils"
 type XID utils.UUID
 
 const (
-	LEN_XID = utils.UUID_SIZE
+	LEN_XID = utils.LEN_UUID
 	SUPER_XID = 0
 )
 
 func PutXID(buf []byte, xid XID) {
-	utils.PutUUID(utils.UUID(xid), buf)
+	utils.PutUUID(buf,utils.UUID(xid))
 }
 
 func ParseXID(raw []byte) XID {
