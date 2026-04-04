@@ -24,7 +24,7 @@ func newTestCacher(getDelay time.Duration) (*cacher, *int64, *int64) {
 			id := atomic.AddInt64(&createCount, 1)
 			return &resource{id: id}, nil
 		},
-		Release: func(uid utils.UUID, obj interface{}) {
+		Release: func(underlying interface{}) {
 			atomic.AddInt64(&releaseCount, 1)
 		},
 		MaxHandles: 0,

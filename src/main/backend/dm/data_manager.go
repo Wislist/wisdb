@@ -131,12 +131,11 @@ func (dm *dataManager) initPage1() {
 
 func (dm *dataManager) Close() {
 	//TODO： 如果事物还在进行，直接Close会出错
-	dm.pc.Close()
+	if dm.page1 != nil {
+		P1SetVCClose(dm.page1)
+		dm.page1.Release()
+	}
 	dm.lg.Close()
-
-	// 关于page1的操作一定要在Close中被最后执行
-	P1SetVCClose(dm.page1)
-	dm.page1.Release()
 	dm.pc.Close()
 }
 
