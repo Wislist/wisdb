@@ -47,3 +47,7 @@ func Uint32ToStr(v uint32) string {
 	return strconv.FormatUint(uint64(v), 10)
 }
 
+func Uint64ToStr(num uint64) string {
+	return strconv.FormatUint(num, 10)
+}
+

@@ -26,7 +26,7 @@ type SerializabilityManager interface {
 
 	Begin(level int) tm.XID
 	Commit(xid tm.XID) error
-	Abort(xid tm.XID) error
+	Abort(xid tm.XID)
 }
 
 type serializabilityManager struct {

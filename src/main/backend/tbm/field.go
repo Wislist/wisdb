@@ -3,8 +3,10 @@ package tbm
 import (
 	"errors"
 	"mydb/src/main/backend/im"
+	"mydb/src/main/backend/parser/statement"
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
+
 )
 
 /*
@@ -62,7 +64,7 @@ func (f *field) parseSelf(raw []byte) {
 	f.index = utils.ParseUUID(raw[pos:])
 	if f.index != utils.NilUUID {
 		var err error
-		f.bt, err = im.Load(f.index, &f.tb.TBM.DM)
+		f.bt, err = im.Load(f.index, f.tb.TBM.DM)
 		if err != nil {
 			panic(err)
 		}
@@ -87,7 +89,7 @@ func CreateField(tb *table, xid tm.XID, fname, ftype string, indexed bool) (*fie
 		if err != nil {
 			return nil, err
 		}
-		bt, err := im.Load(index, &tb.TBM.DM)
+		bt, err := im.Load(index, tb.TBM.DM)
 		if err != nil {
 			return nil, err
 		}
@@ -143,6 +145,118 @@ func (f *field) Insert(key interface{}, uuid utils.UUID) error {
 	ukey := f.ValueToUUID(key)
 	return f.bt.Insert(ukey, uuid)
 }
+
+func (f *field) Search(left, right utils.UUID) ([]utils.UUID, error) {
+
+	return f.bt.SearchRange(left, right)
+}
+
+func (f *field) StrToValue(valStr string) (interface{}, error) {
+	var v interface{}
+	var err error
+	switch f.FType {
+		case "uint32":
+			v, err = utils.StrToUint32(valStr)
+		case "uint64":
+			v, err = utils.StrToUint64(valStr)
+		case "string":
+			v = valStr
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (f *field) ValueToRaw(v interface{}) []byte {
+	var raw []byte
+	switch f.FType {
+		case "uint32":
+			raw = utils.Uint32ToRaw(v.(uint32))
+		case "uint64":
+			raw = utils.Uint64ToRaw(v.(uint64))
+		case "string":
+			raw = utils.VarStrToRaw(v.(string))
+	}
+	return raw
+}
+
+func (f *field) ParseValue(raw []byte) (interface{}, int) {
+	var v interface{}
+	var shift int
+	switch f.FType {
+	case "uint32":
+		v = utils.ParseUint32(raw)
+		shift = 4
+	case "uint64":
+		v = utils.ParseUint64(raw)
+		shift = 8
+	case "string": // 解析出VarStr
+		v, shift = utils.ParseVarStr(raw)
+	}
+	return v, shift
+}
+
+func (f *field) ValueToUUID(v interface{}) utils.UUID {
+	var uuid utils.UUID
+	switch f.FType {
+	case "uint32":
+		uuid = utils.UUID(v.(uint32))
+	case "uint64":
+		uuid = utils.UUID(v.(uint64))
+	case "string": // 解析出VarStr
+		uuid = utils.StrToUUID(v.(string))
+	}
+	return uuid
+}
+
+func (f *field) ValuePrint(v interface{}) string {
+	var str string
+	switch f.FType {
+	case "uint32":
+		str = utils.Uint32ToStr(v.(uint32))
+	case "uint64":
+		str = utils.Uint64ToStr(v.(uint64))
+	case "string": // 解析出VarStr
+		str = v.(string)
+	}
+	return str
+}
+
+/*
+	TODO: right为0和left为INF会有问题
+*/
+func (f *field) CalExp(exp *statement.SingleExp) (left, right utils.UUID, err error) {
+	var v interface{}
+	if exp.CmpOp == "<" {
+		left = 0
+		v, err = f.StrToValue(exp.Value)
+		if err != nil {
+			return
+		}
+		right = f.ValueToUUID(v)
+		if right > 0 {
+			right--
+		}
+	} else if exp.CmpOp == "=" {
+		v, err = f.StrToValue(exp.Value)
+		if err != nil {
+			return
+		}
+		left = f.ValueToUUID(v)
+		right = left
+	} else if exp.CmpOp == ">" {
+		right = utils.INF
+		v, err = f.StrToValue(exp.Value)
+		if err != nil {
+			return
+		}
+		left = f.ValueToUUID(v) + 1
+	}
+	return
+}
+
+
 
 
 
