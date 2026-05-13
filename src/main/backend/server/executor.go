@@ -101,6 +101,8 @@ func (e *executor) execute2(stat interface{}) ([]byte, error) {
 		result = e.tbm.Show(e.xid)
 	case *statement.Create:
 		result, err = e.tbm.Create(e.xid, st)
+	case *statement.Drop:
+		result, err = e.tbm.Drop(e.xid, st)
 	case *statement.Read:
 		result, err = e.tbm.Read(e.xid, st)
 	case *statement.Insert:
@@ -113,4 +115,3 @@ func (e *executor) execute2(stat interface{}) ([]byte, error) {
 
 	return result, err
 }
-

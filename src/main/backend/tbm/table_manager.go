@@ -8,7 +8,8 @@ TBM本身的模型如下:
 TBM将它管理的所有的表, 以链表的结构组织起来.
 并利用Booter, 存储了第一张表的UUID.
 
-TBM目前没有实现表的可见性管理, 也没有实现Drop语句.
+	TBM目前没有实现表的可见性管理.
+
 这样的目的是为了简洁代码.
 */
 package tbm
@@ -21,6 +22,7 @@ import (
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
 	"mydb/src/main/backend/utils/booter"
+	"sort"
 	"sync"
 )
 
@@ -36,6 +38,7 @@ type TableManager interface {
 
 	Show(xid tm.XID) []byte
 	Create(xid tm.XID, create *statement.Create) ([]byte, error)
+	Drop(xid tm.XID, drop *statement.Drop) ([]byte, error)
 
 	Insert(xid tm.XID, insert *statement.Insert) ([]byte, error)
 	Read(xid tm.XID, read *statement.Read) ([]byte, error)
@@ -49,20 +52,20 @@ type tableManager struct {
 
 	booter booter.Booter
 
-	tc map[string]*table
-	xtc map[tm.XID][]*table
+	tc   map[string]*table
+	xtc  map[tm.XID][]*table
 	lock sync.Mutex
 }
 
 func newTableManager(sm sm.SerializabilityManager, dm dm.DataManager, booter booter.Booter) *tableManager {
 	tbm := &tableManager{
-		DM: dm,
-		SM: sm,
+		DM:     dm,
+		SM:     sm,
 		booter: booter,
-		tc: make(map[string]*table),
-		xtc: make(map[tm.XID][]*table),
+		tc:     make(map[string]*table),
+		xtc:    make(map[tm.XID][]*table),
 	}
-	
+
 	tbm.loadTables()
 	return tbm
 }
@@ -70,6 +73,11 @@ func newTableManager(sm sm.SerializabilityManager, dm dm.DataManager, booter boo
 func Create(path string, sm sm.SerializabilityManager, dm dm.DataManager) *tableManager {
 	booter := booter.Create(path)
 	booter.Update(utils.UUIDToRaw(utils.NilUUID))
+	return newTableManager(sm, dm, booter)
+}
+
+func Open(path string, sm sm.SerializabilityManager, dm dm.DataManager) *tableManager {
+	booter := booter.Open(path)
 	return newTableManager(sm, dm, booter)
 }
 
@@ -92,7 +100,6 @@ func (tbm *tableManager) updateFirstTableUUID(uuid utils.UUID) {
 	raw := utils.UUIDToRaw(uuid)
 	tbm.booter.Update(raw)
 }
-
 
 func (tbm *tableManager) Read(xid tm.XID, read *statement.Read) ([]byte, error) {
 	tbm.lock.Lock()
@@ -175,8 +182,54 @@ func (tbm *tableManager) Create(xid tm.XID, create *statement.Create) ([]byte, e
 	}
 }
 
+func (tbm *tableManager) Drop(xid tm.XID, drop *statement.Drop) ([]byte, error) {
+	tbm.lock.Lock()
+	defer tbm.lock.Unlock()
+
+	if _, ok := tbm.tc[drop.TableName]; ok == false {
+		return nil, ErrNoThatTable
+	}
+
+	delete(tbm.tc, drop.TableName)
+	for txid, tables := range tbm.xtc {
+		filtered := tables[:0]
+		for _, tb := range tables {
+			if tb.Name != drop.TableName {
+				filtered = append(filtered, tb)
+			}
+		}
+		tbm.xtc[txid] = filtered
+	}
+
+	if err := tbm.rebuildTableChain(xid); err != nil {
+		return nil, err
+	}
+	return []byte("drop " + drop.TableName), nil
+}
+
+func (tbm *tableManager) rebuildTableChain(xid tm.XID) error {
+	tables := make([]*table, 0, len(tbm.tc))
+	for _, tb := range tbm.tc {
+		tables = append(tables, tb)
+	}
+	sort.Slice(tables, func(i, j int) bool {
+		return tables[i].Name < tables[j].Name
+	})
+
+	next := utils.NilUUID
+	for i := len(tables) - 1; i >= 0; i-- {
+		tables[i].Next = next
+		if err := tables[i].persistSelf(xid); err != nil {
+			return err
+		}
+		next = tables[i].SelfUUID
+	}
+	tbm.updateFirstTableUUID(next)
+	return nil
+}
+
 /*
-	Show 返回所有的表名.
+Show 返回所有的表名.
 */
 func (tbm *tableManager) Show(xid tm.XID) []byte {
 	tbm.lock.Lock()

@@ -26,6 +26,10 @@ type fakeTableManager struct {
 	createXIDs []tm.XID
 	createErr  error
 	createResp []byte
+
+	dropXIDs []tm.XID
+	dropErr  error
+	dropResp []byte
 }
 
 func newFakeTableManager() *fakeTableManager {
@@ -33,6 +37,7 @@ func newFakeTableManager() *fakeTableManager {
 		nextXID:    100,
 		showResp:   []byte("show"),
 		createResp: []byte("create ok"),
+		dropResp:   []byte("drop ok"),
 	}
 }
 
@@ -68,6 +73,14 @@ func (f *fakeTableManager) Create(xid tm.XID, create *statement.Create) ([]byte,
 		return nil, f.createErr
 	}
 	return f.createResp, nil
+}
+
+func (f *fakeTableManager) Drop(xid tm.XID, drop *statement.Drop) ([]byte, error) {
+	f.dropXIDs = append(f.dropXIDs, xid)
+	if f.dropErr != nil {
+		return nil, f.dropErr
+	}
+	return f.dropResp, nil
 }
 
 func (f *fakeTableManager) Insert(xid tm.XID, insert *statement.Insert) ([]byte, error) {
@@ -170,6 +183,28 @@ func TestExecutorAutoTransactionAbortOnFailure(t *testing.T) {
 	}
 	if len(ft.commitXIDs) != 0 {
 		t.Fatalf("unexpected commit calls=%v", ft.commitXIDs)
+	}
+}
+
+func TestExecutorDrop(t *testing.T) {
+	ft := newFakeTableManager()
+	exe := NewExecutor(ft)
+
+	resp, err := exe.Execute([]byte("drop table user"))
+	if err != nil {
+		t.Fatalf("drop execute error: %v", err)
+	}
+	if !bytes.Equal(resp, ft.dropResp) {
+		t.Fatalf("drop resp mismatch: %s", resp)
+	}
+	if ft.beginCalls != 1 {
+		t.Fatalf("begin calls=%d want=1", ft.beginCalls)
+	}
+	if len(ft.dropXIDs) != 1 || ft.dropXIDs[0] != 100 {
+		t.Fatalf("drop xid mismatch, got=%v", ft.dropXIDs)
+	}
+	if len(ft.commitXIDs) != 1 || ft.commitXIDs[0] != 100 {
+		t.Fatalf("commit xid mismatch, got=%v", ft.commitXIDs)
 	}
 }
 

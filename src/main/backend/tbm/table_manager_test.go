@@ -169,8 +169,47 @@ func TestTableManagerLifecycle(t *testing.T) {
 		t.Fatalf("read missing table err=%v want=%v", err, ErrNoThatTable)
 	}
 
+	xid3, _ := tbm0.Begin(&statement.Begin{})
+	dropMsg, err := tbm0.Drop(xid3, &statement.Drop{TableName: "user"})
+	if err != nil {
+		t.Fatalf("drop error: %v", err)
+	}
+	if string(dropMsg) != "drop user" {
+		t.Fatalf("drop message=%s", dropMsg)
+	}
+	showAfterDrop := tbm0.Show(xid3)
+	if bytes.Contains(showAfterDrop, []byte("user")) {
+		t.Fatalf("show still contains dropped table: %s", showAfterDrop)
+	}
+	_, err = tbm0.Read(xid3, &statement.Read{TableName: "user", Fields: []string{"*"}})
+	if err != ErrNoThatTable {
+		t.Fatalf("read dropped table err=%v want=%v", err, ErrNoThatTable)
+	}
+	if _, err := tbm0.Commit(xid3); err != nil {
+		t.Fatalf("commit drop transaction error: %v", err)
+	}
+
+	dm0.Close()
+	tm0.Close()
+
+	tm1 := tm.Open(base)
+	dm1 := dm.Open(base, mem, tm1)
+	sm1 := sm.NewSerializabilityManager(tm1, dm1)
+	tbm1 := Open(base, sm1, dm1)
+
+	xid4, _ := tbm1.Begin(&statement.Begin{})
+	showAfterReopen := tbm1.Show(xid4)
+	if bytes.Contains(showAfterReopen, []byte("user")) {
+		t.Fatalf("show after reopen still contains dropped table: %s", showAfterReopen)
+	}
+	_, err = tbm1.Read(xid4, &statement.Read{TableName: "user", Fields: []string{"*"}})
+	if err != ErrNoThatTable {
+		t.Fatalf("read dropped table after reopen err=%v want=%v", err, ErrNoThatTable)
+	}
+	tbm1.Abort(xid4)
+
 	defer func() {
-		dm0.Close()
-		tm0.Close()
+		dm1.Close()
+		tm1.Close()
 	}()
 }

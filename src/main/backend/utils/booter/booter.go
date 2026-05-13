@@ -31,7 +31,7 @@ type booter struct {
 func Create(path string) *booter {
 	removeBadTMP(path)
 
-	file, err := os.OpenFile(path+_SUFFIX, os.O_RDWR, 0600)
+	file, err := os.OpenFile(path+_SUFFIX, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -44,6 +44,19 @@ func Create(path string) *booter {
 // removeBadTMP 移除之前因为数据库崩坏遗留下来的tmp文件
 func removeBadTMP(path string) {
 	os.Remove(path + _SUFFIX_TMP)
+}
+
+func Open(path string) *booter {
+	removeBadTMP(path)
+
+	file, err := os.OpenFile(path+_SUFFIX, os.O_RDWR, 0600)
+	if err != nil {
+		panic(err)
+	}
+	return &booter{
+		path: path,
+		file: file,
+	}
 }
 
 func (bt *booter) Load() []byte {
@@ -59,7 +72,7 @@ func (bt *booter) Load() []byte {
 }
 
 func (bt *booter) Update(data []byte) {
-	f, err := os.OpenFile(bt.path + _SUFFIX_TMP, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(bt.path+_SUFFIX_TMP, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -74,19 +87,18 @@ func (bt *booter) Update(data []byte) {
 		panic(err)
 	}
 
-
 	err = f.Close()
 	if err != nil {
 		panic(err)
 	}
 
 	//os.Rename 被当作是原子性的
-	err = os.Rename(bt.path + _SUFFIX_TMP, bt.path + _SUFFIX)
+	err = os.Rename(bt.path+_SUFFIX_TMP, bt.path+_SUFFIX)
 	if err != nil {
 		panic(err)
 	}
 
-	bt.file, err = os.OpenFile(bt.path + _SUFFIX, os.O_RDWR, 0600)
+	bt.file, err = os.OpenFile(bt.path+_SUFFIX, os.O_RDWR, 0600)
 	if err != nil {
 		panic(err)
 	}
