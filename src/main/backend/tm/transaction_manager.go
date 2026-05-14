@@ -168,6 +168,8 @@ func (t *transactionManager) Commit(xid XID) {
 回滚事务
 */
 func (t *transactionManager) Abort(xid XID) {
+	t.counterLock.Lock()
+	defer t.counterLock.Unlock()
 	t.updateXID(xid, byte(FIELD_TRAN_ABORTED))
 }
 

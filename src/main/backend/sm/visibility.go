@@ -23,19 +23,18 @@ func IsVersionSkip(tm tm.TransactionManager, t *transaction, e *entry) bool {
 func IsVisible(tm tm.TransactionManager, t *transaction, e *entry) bool {
 	if t.Level == 0 {
 		return readCommitted(tm, t, e)
-	} else {
-		return repeatableRead(tm, t, e)
 	}
-	return false
+	return repeatableRead(tm, t, e)
 }
 
+// 读已提交：只要XMIN已提交，且XMAX未提交或为0，就可见
 func readCommitted(tm tm.TransactionManager, t *transaction, e *entry) bool {
 	xid := t.XID
 	xmin := e.XMIN()
 	xmax := e.XMAX()
 
 	if xmin == xid && xmax == 0 {
-		return true
+		return true			// 自己创建且未删除
 	}
 
 	isCommitted := tm.IsCommitted(xmin)
@@ -52,7 +51,7 @@ func readCommitted(tm tm.TransactionManager, t *transaction, e *entry) bool {
 	}
 	return false
 }
-
+// 可串行化：基于事务开始时的快照判断
 func repeatableRead(tm tm.TransactionManager, t *transaction, e *entry) bool {
 	xid := t.XID
 	xmin := e.XMIN()

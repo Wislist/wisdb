@@ -52,7 +52,7 @@ func Recovery(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher) {
 	undoTransactions(tm,lg,pc)
 	utils.Info("Undo Transactions Over.")
 }
-
+// redo: 重做已提交事务的操作
 func redoTransactions(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher){
 	lg.Rewind()
 	for {
@@ -62,11 +62,11 @@ func redoTransactions(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcac
 		}
 		if isInsertLog(log) {
 			xid,_,_,_ := parseInsertLog(log)
-			if tm.IsActive(xid) == false {
+			if tm.IsActive(xid) == false { // 事务已提交或回滚，执行redo
 				doInsertLog(pc,log,_REDO)
 			}
 		} else {
-			xid,_,_,_ := parseInsertLog(log)
+			xid,_,_,_,_ := parseUpdateLog(log)
 			if tm.IsActive(xid) == false {
 				doUpdateLog(pc,log,_REDO)
 			}
@@ -74,8 +74,9 @@ func redoTransactions(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcac
 		
 	}
 }
-
+// undo： 撤销未提交的事务操作
 func undoTransactions(tm0 tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher){
+	// 收集所有活跃事务的日志，倒序执行撤销
 	logCache := make(map[tm.XID][][]byte)
 	lg.Rewind()
 	for {
@@ -97,12 +98,12 @@ func undoTransactions(tm0 tm.TransactionManager,lg logger.Logger, pc pcacher.Pca
 	}
 
 	for xid,logs := range logCache {
-		for i := len(logs)-1; i >= 0; i--	{
+		for i := len(logs)-1; i >= 0; i--	{ // 倒序撤销
 			log := logs[i]
 			if isInsertLog(log) {
-				doInsertLog(pc,log,_UNDO)
+				doInsertLog(pc,log,_UNDO) // 把有效位改为无效
 			} else {
-				doUpdateLog(pc,log,_UNDO)
+				doUpdateLog(pc,log,_UNDO) // 用旧数据
 			}
 		}
 		tm0.Abort(xid)

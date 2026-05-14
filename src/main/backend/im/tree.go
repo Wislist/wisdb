@@ -69,18 +69,20 @@ func Load(bootUUID utils.UUID, dm dm.DataManager) (BPlusTree, error) {
 	}, nil
 }
 
-// rootUUID 通过bootUUID读取该树的根节点地址
-func (bt *bPlusTree) rootUUID() utils.UUID {
-	bt.bootLock.Lock()
-	defer bt.bootLock.Unlock()
+// rootUUID 通过bootUUID读取该树的根节点地址（调用方需持有 bootLock）
+func (bt *bPlusTree) rootUUID_() utils.UUID {
 	return utils.ParseUUID(bt.bootDataitem.Data())
 }
 
-// updaterootUUID 更新该树的根节点
-func (bt *bPlusTree) updaterootUUID(left, right, rightKey utils.UUID) error {
+// rootUUID 并发安全版本，供外部只读场景使用
+func (bt *bPlusTree) rootUUID() utils.UUID {
 	bt.bootLock.Lock()
 	defer bt.bootLock.Unlock()
-	
+	return bt.rootUUID_()
+}
+
+// updaterootUUID_ 更新该树的根节点（调用方需持有 bootLock）
+func (bt *bPlusTree) updaterootUUID_(left, right, rightKey utils.UUID) error {
 	rootRaw := newRootRaw(left, right, rightKey)
 	newRootUUID, err := bt.DM.Insert(tm.SUPER_XID, rootRaw)
 	if err != nil {
@@ -91,6 +93,13 @@ func (bt *bPlusTree) updaterootUUID(left, right, rightKey utils.UUID) error {
 	copy(bt.bootDataitem.Data(), utils.UUIDToRaw(newRootUUID))
 	bt.bootDataitem.After(tm.SUPER_XID)
 	return nil
+}
+
+// updaterootUUID 更新该树的根节点（并发安全版本）
+func (bt *bPlusTree) updaterootUUID(left, right, rightKey utils.UUID) error {
+	bt.bootLock.Lock()
+	defer bt.bootLock.Unlock()
+	return bt.updaterootUUID_(left, right, rightKey)
 }
 
 // searchLeaf 根据key，在nodeUUID代表节点的子树中搜索， 直到找到其对应的叶节点地址
@@ -137,7 +146,7 @@ func (bt *bPlusTree) Search(key utils.UUID) ([]utils.UUID, error) {
 func (bt *bPlusTree) SearchRange(leftKey, rightKey utils.UUID) ([]utils.UUID, error) {
 	rootUUID := bt.rootUUID()
 
-	leafUUID, err := bt.searchLeaf(rootUUID, leftKey)
+	leafUUID, err := bt.searchLeaf(rootUUID, leftKey) // 找到左边界叶子节点
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +154,7 @@ func (bt *bPlusTree) SearchRange(leftKey, rightKey utils.UUID) ([]utils.UUID, er
 	var uuids []utils.UUID
 	//不断从leaf向sibling迭代，将所有满足的uuid都加入
 	for {
-		leaf, err := loadNode(bt, leafUUID)
+		leaf, err := loadNode(bt, leafUUID) // 收集当前叶子节点里满足的UUID
 		if err != nil {
 			return nil, err
 		}
@@ -165,27 +174,30 @@ func (bt *bPlusTree) SearchRange(leftKey, rightKey utils.UUID) ([]utils.UUID, er
 
 // Insert 插入一个uuid, key 键值对
 func (bt *bPlusTree) Insert(key, uuid utils.UUID) error {
-	rootUUID := bt.rootUUID()
+	bt.bootLock.Lock()
+	rootUUID := bt.rootUUID_()
+	bt.bootLock.Unlock()
 
 	newNode, newKey, err := bt.insert(rootUUID, uuid, key)
 	if err != nil {
 		return err
 	}
-	/*
-		如果newNode != nil ，则需要变更根节点了
-
-		TODO: 这里有一个小BUG， 如果同时有多个事务都准备updaterootUUID，
-		那么就会导致根节点被重复更新， 导致数据不一致.
-	*/
 
 	if newNode != utils.NilUUID {
-		err := bt.updaterootUUID(rootUUID, newNode, newKey)
+		// 持锁保护"读根节点 → 更新根节点"的原子性，防止并发分裂时重复更新
+		bt.bootLock.Lock()
+		// 重新读取根节点：在 insert 执行期间，其他 goroutine 可能已经更新了根节点
+		// 只有当根节点仍是我们插入时的那个，才需要更新
+		currentRoot := bt.rootUUID_()
+		if currentRoot == rootUUID {
+			err = bt.updaterootUUID_(rootUUID, newNode, newKey)
+		}
+		bt.bootLock.Unlock()
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-	
 }
 
 // insert 将(uuid, key)插入到B+树中，如果有分裂，则将分裂产生的新节点也返回

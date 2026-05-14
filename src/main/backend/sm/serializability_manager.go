@@ -65,9 +65,9 @@ func NewSerializabilityManager(tm0 tm.TransactionManager, dm dm.DataManager) *se
 func (sm *serializabilityManager) Delete(xid tm.XID, uuid utils.UUID) (bool, error) {
 	sm.lock.Lock()
 	t := sm.tc[xid]
-	defer sm.lock.Unlock()
 
 	if t.Err != nil {
+		sm.lock.Unlock()
 		return false, t.Err
 	}
 
@@ -76,29 +76,44 @@ func (sm *serializabilityManager) Delete(xid tm.XID, uuid utils.UUID) (bool, err
 	*/
 	handle, err := sm.ec.Get(uuid)
 	if err == ErrNilEntry {
+		sm.lock.Unlock()
 		return false, ErrNilEntry
 	}
 	if err != nil {
+		sm.lock.Unlock()
 		return false, err
 	}
 	e := handle.(*entry)
 	defer e.Release()
 
 	if IsVisible(sm.TM, t, e) == false { // 如果本身对其不可见, 则直接返回
+		sm.lock.Unlock()
 		return false, nil
 	}
 
 	ok, ch := sm.lt.Add(utils.UUID(xid), uuid)
 	if ok == false {
 		t.Err = ErrCannotSR
+		sm.lock.Unlock()
 		sm.abort(xid, true)
 		t.AutoAbortted = true
 		return false, t.Err
 	}
+
+	// 释放全局锁后再等待，避免阻塞其他操作
+	sm.lock.Unlock()
 	<-ch
+
+	sm.lock.Lock()
+	// 重新检查事务状态，等待期间可能已被自动回滚
+	if t.Err != nil {
+		sm.lock.Unlock()
+		return false, t.Err
+	}
 
 	//如果之前已经被它本身删除，则直接返回
 	if e.XMAX() == xid {
+		sm.lock.Unlock()
 		return false, nil
 	}
 
@@ -106,6 +121,7 @@ func (sm *serializabilityManager) Delete(xid tm.XID, uuid utils.UUID) (bool, err
 	skip := IsVersionSkip(sm.TM, t, e)
 	if skip == true {
 		t.Err = ErrCannotSR
+		sm.lock.Unlock()
 		sm.abort(xid, true)
 		t.AutoAbortted = true
 		return false, t.Err
@@ -113,6 +129,7 @@ func (sm *serializabilityManager) Delete(xid tm.XID, uuid utils.UUID) (bool, err
 
 	//更新其XMAX
 	e.SetXMAX(xid)
+	sm.lock.Unlock()
 	return true, nil
 }
 

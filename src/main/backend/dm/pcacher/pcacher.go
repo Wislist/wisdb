@@ -94,6 +94,7 @@ func newPcacher(file *os.File, mem int64) *pcacher {
 }
 
 func (p *pcacher) Close() {
+	p.c.Close()
 	p.file.Close()
 }
 

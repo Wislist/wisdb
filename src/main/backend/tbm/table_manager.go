@@ -235,13 +235,21 @@ func (tbm *tableManager) Show(xid tm.XID) []byte {
 	tbm.lock.Lock()
 	defer tbm.lock.Unlock()
 	var results []byte
-	for _, t := range tbm.tc { // 打印已经提交的表
+
+	// 当前事务创建的表（未提交，不在 tc 中）
+	xtcSet := make(map[string]bool)
+	for _, t := range tbm.xtc[xid] {
+		xtcSet[t.Name] = true
 		tPrint := t.Print()
 		results = append(results, tPrint...)
 		results = append(results, '\n')
 	}
 
-	for _, t := range tbm.xtc[xid] { // 打印它自己创建的表
+	// 已提交的表（排除当前事务创建的，避免重复）
+	for _, t := range tbm.tc {
+		if xtcSet[t.Name] {
+			continue
+		}
 		tPrint := t.Print()
 		results = append(results, tPrint...)
 		results = append(results, '\n')

@@ -413,12 +413,12 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 		tokener.Pop()
 		field, err := tokener.Peek() // get field
 
-		if field == "(" { // has index
-			break
-		}
-
 		if err != nil {
 			return nil, err
+		}
+
+		if field == "(" { // has index
+			break
 		}
 		if isName(field) == false {
 			return nil, ErrInvalidStat
@@ -533,6 +533,9 @@ func parseBegin(tokener *tokener) (*statement.Begin, error) {
 	if tmp1 == "read" {
 		tokener.Pop()
 		tmp2, err := tokener.Peek()
+		if err != nil {
+			return nil, err
+		}
 		if tmp2 == "committed" {
 			tokener.Pop()
 			eof, err := tokener.Peek()
@@ -545,7 +548,7 @@ func parseBegin(tokener *tokener) (*statement.Begin, error) {
 
 			return begin, nil
 		} else {
-			return nil, err
+			return nil, ErrInvalidStat
 		}
 	} else if tmp1 == "repeatable" {
 		tokener.Pop()

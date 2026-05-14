@@ -43,12 +43,12 @@ func (lt *lockTable) Add(xid, uid utils.UUID) (bool, chan struct{}) {
 	lt.lock.Lock()
 	defer lt.lock.Unlock()
 
-	if isInList(lt.x2u, xid, uid ) == true {
+	if isInList(lt.x2u, xid, uid) == true {
 		ch := make(chan struct{})
-		go func ()  {
+		go func() {
 			ch <- struct{}{}
 		}()
-		return false, ch
+		return true, ch
 	}
 
 	if _, ok := lt.u2x[uid]; ok == false {
@@ -75,12 +75,7 @@ func (lt *lockTable) Add(xid, uid utils.UUID) (bool, chan struct{}) {
 	return true, ch
 }
 
-var (
-	xidStamp map[utils.UUID]int
-	stamp    int
-)
-
-func (lt *lockTable) dfs(xid utils.UUID) bool {
+func (lt *lockTable) dfs(xid utils.UUID, xidStamp map[utils.UUID]int, stamp int) bool {
 	stp, ok := xidStamp[xid]
 	if ok && stp == stamp {
 		return true //有环
@@ -96,18 +91,18 @@ func (lt *lockTable) dfs(xid utils.UUID) bool {
 	}
 	xid, ok = lt.u2x[uid]
 	utils.Assert(ok)
-	return lt.dfs(xid)
+	return lt.dfs(xid, xidStamp, stamp)
 }
 
 func (lt *lockTable) hasDeadLock() bool {
-	xidStamp = make(map[utils.UUID]int)
-	stamp = 1
+	xidStamp := make(map[utils.UUID]int)
+	stamp := 1
 	for xid := range lt.x2u {
 		if xidStamp[xid] > 0 {
 			continue
 		}
 		stamp++
-		if lt.dfs(xid) == true {
+		if lt.dfs(xid, xidStamp, stamp) == true {
 			return true
 		}
 	}
