@@ -20,8 +20,8 @@ func main() {
 		os.Exit(-1)
 	}
 
-	pro := transporter.NewProtocoler()
-	trs := transporter.NewHexTransporter(conn)
+	pro := transporter.NewWireProtocoler()
+	trs := transporter.NewWireTransporter(conn)
 	pkger := transporter.NewPackager(trs, pro)
 
 	clt := client.NewClient(pkger)

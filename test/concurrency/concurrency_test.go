@@ -35,8 +35,8 @@ func createBooterFile(t *testing.T, base string) {
 }
 
 func runBackendSession(conn net.Conn, tableManager tbm.TableManager) {
-	tr := transporter.NewHexTransporter(conn)
-	pr := transporter.NewProtocoler()
+	tr := transporter.NewWireTransporter(conn)
+	pr := transporter.NewWireServerProtocoler()
 	pkger := transporter.NewPackager(tr, pr)
 	defer pkger.Close()
 
@@ -58,8 +58,8 @@ func runBackendSession(conn net.Conn, tableManager tbm.TableManager) {
 func newPipeClient(tableManager tbm.TableManager) clt.Client {
 	serverConn, clientConn := net.Pipe()
 	go runBackendSession(serverConn, tableManager)
-	pro := transporter.NewProtocoler()
-	trs := transporter.NewHexTransporter(clientConn)
+	pro := transporter.NewWireProtocoler()
+	trs := transporter.NewWireTransporter(clientConn)
 	pkger := transporter.NewPackager(trs, pro)
 	return clt.NewClient(pkger)
 }

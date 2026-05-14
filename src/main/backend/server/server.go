@@ -51,8 +51,8 @@ func (s *server) serve(conn net.Conn) {
 		conn.Close()
 	}()
 
-	tr := transporter.NewHexTransporter(conn)
-	pr := transporter.NewProtocoler()
+	tr := transporter.NewWireTransporter(conn)
+	pr := transporter.NewWireServerProtocoler()
 	packager := transporter.NewPackager(tr, pr)
 	defer packager.Close()
 	var pkg transporter.Package
