@@ -153,10 +153,13 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 // persist 将t自身持久化到磁盘上, 该函数只会在CreateTable的时候被调用
 func (t *table) persistSelf(xid tm.XID) error {
 	raw := utils.VarStrToRaw(t.Name)
+	raw = append(raw, t.status)
 	raw = append(raw, utils.UUIDToRaw(t.Next)...)
+	raw = append(raw, byte(len(t.fields)))
 	for _, f := range t.fields {
 		raw = append(raw, utils.UUIDToRaw(f.SelfUUID)...)
 	}
+	raw = append(raw, utils.UUIDToRaw(t.rowIndex)...)
 
 	self, err := t.TBM.SM.Insert(xid, raw)
 	if err != nil {
