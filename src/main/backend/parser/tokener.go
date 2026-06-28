@@ -139,7 +139,7 @@ func (tk *tokener) ErrStat() []byte {
 
 func isSymbol(b byte) bool {
 	return b == '>' || b == '<' || b == '=' || b == '*' ||
-		b == ',' || b == '(' || b == ')'
+		b == ',' || b == '(' || b == ')' || b == '{' || b == '}'
 }
 
 func isAlphaBeta(b byte) bool {

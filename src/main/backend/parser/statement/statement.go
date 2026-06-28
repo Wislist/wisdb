@@ -34,8 +34,9 @@ type Delete struct {
 }
 
 type Insert struct {
-	TableName string
-	Values    []string
+	TableName  string
+	Values     []string   // single row (legacy)
+	ValuesList [][]string // multi-row (bulk insert)
 }
 
 // Aggregate represents an aggregate function call.

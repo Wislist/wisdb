@@ -183,6 +183,23 @@ func parseInsert(tokener *tokener) (*statement.Insert, error) {
 		return nil, ErrInvalidStat
 	}
 
+	// Peek at the next token to decide single vs bulk insert
+	tokener.Pop()
+	first, err := tokener.Peek()
+	if err != nil {
+		return nil, err
+	}
+	if first == "" {
+		return nil, ErrInvalidStat
+	}
+
+	if first == "{" {
+		// Bulk insert: {v1, v2, v3}, {v4, v5, v6}, ...
+		return parseInsertBulk(tokener, insert)
+	}
+
+	// Single-row insert (legacy): val1 val2 val3 ...
+	insert.Values = append(insert.Values, first)
 	for {
 		tokener.Pop()
 		value, err := tokener.Peek()
@@ -191,9 +208,57 @@ func parseInsert(tokener *tokener) (*statement.Insert, error) {
 		}
 		if value == "" {
 			break
-		} else {
-			insert.Values = append(insert.Values, value)
 		}
+		insert.Values = append(insert.Values, value)
+	}
+
+	return insert, nil
+}
+
+func parseInsertBulk(tokener *tokener, insert *statement.Insert) (*statement.Insert, error) {
+	for {
+		var row []string
+		for {
+			tokener.Pop()
+			value, err := tokener.Peek()
+			if err != nil {
+				return nil, err
+			}
+			if value == "" {
+				return nil, ErrInvalidStat
+			}
+			if value == "}" {
+				break // end of current row
+			}
+			if value == "," {
+				continue // next value in current row
+			}
+			row = append(row, value)
+		}
+		insert.ValuesList = append(insert.ValuesList, row)
+
+		// Check for more rows
+		tokener.Pop()
+		next, err := tokener.Peek()
+		if err != nil {
+			return nil, err
+		}
+		if next == "" {
+			break // end of statement
+		}
+		if next == "," {
+			// Expect { for next row
+			tokener.Pop()
+			br, err := tokener.Peek()
+			if err != nil {
+				return nil, err
+			}
+			if br != "{" {
+				return nil, ErrInvalidStat
+			}
+			continue
+		}
+		return nil, ErrInvalidStat
 	}
 
 	return insert, nil

@@ -549,29 +549,36 @@ func (t *table) computeAggregates(entries []entry, aggs []statement.Aggregate) s
 
 // Insert 对该表执行insert语句.
 func (t *table) Insert(xid tm.XID, insert *statement.Insert) error {
-	e, err := t.strToEntry(insert.Values) // 将insert的values转换为entry
-	if err != nil {
-		return err
+	// Determine which value list to use: bulk (ValuesList) or single (Values)
+	rows := insert.ValuesList
+	if len(rows) == 0 && len(insert.Values) > 0 {
+		rows = [][]string{insert.Values}
 	}
 
-	raw := t.entryToRaw(e) // 将该entry插入到DB
-	uuid, err := t.TBM.SM.Insert(xid, raw)
-	if err != nil {
-		return err
-	}
+	for _, values := range rows {
+		e, err := t.strToEntry(values)
+		if err != nil {
+			return err
+		}
 
-	for _, f := range t.fields { // 更新对应的索引
-		if f.IsIndexed() {
-			err := f.Insert(e[f.FName], uuid)
-			if err != nil {
-				return err
+		raw := t.entryToRaw(e)
+		uuid, err := t.TBM.SM.Insert(xid, raw)
+		if err != nil {
+			return err
+		}
+
+		for _, f := range t.fields {
+			if f.IsIndexed() {
+				if err := f.Insert(e[f.FName], uuid); err != nil {
+					return err
+				}
 			}
 		}
-	}
 
-	// Insert into hidden row index for full table scans
-	if err := t.rowIndexBt.Insert(uuid, uuid); err != nil {
-		return err
+		// Insert into hidden row index for full table scans
+		if err := t.rowIndexBt.Insert(uuid, uuid); err != nil {
+			return err
+		}
 	}
 
 	return nil
