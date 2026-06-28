@@ -34,6 +34,7 @@ const (
 
 func main() {
 	cobra.EnableCommandSorting = false
+	setHelpTemplates(rootCmd)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -41,7 +42,7 @@ func main() {
 
 var rootCmd = &cobra.Command{
 	Use:     "wisdb-server",
-	Short:   "WisDB — a lightweight KV-based relational database",
+	Short:   utils.CyanText("WisDB") + " \u2014 a lightweight KV-based relational database",
 	Version: version,
 	Long:    "WisDB is a lightweight KV-based relational database prototype written in Go.\nIt features MVCC transactions, WAL recovery, B+Tree indexing, and a TCP\nclient interface with SQL support.\n\nAll database files are stored inside a single directory.",
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
@@ -49,22 +50,21 @@ var rootCmd = &cobra.Command{
 }
 
 var serveCmd = &cobra.Command{
-	Use:   "serve --db-path <path> [flags]",
-	Short: "Start the database server",
-	Long:  "Start the WisDB server, listening for client connections.\n\nThe database directory must already exist and contain a valid WisDB\ndatabase (use 'create' to initialize one).",
-	Example: `  wisdb-server serve --db-path ./mydb
-  wisdb-server serve --db-path ./mydb --mem 128MB --addr :4000`,
-	Args: cobra.NoArgs,
-	RunE: runServe,
+	Use:     "serve --db-path <path> [flags]",
+	Short:   "Start the database server",
+	Long:    "Start the WisDB server, listening for client connections.\n\nThe database directory must already exist and contain a valid WisDB\ndatabase (use 'create' to initialize one).",
+	Example: "  wisdb-server serve --db-path ./mydb\n  wisdb-server serve --db-path ./mydb --mem 128MB --addr :4000",
+	Args:    cobra.NoArgs,
+	RunE:    runServe,
 }
 
 var createCmd = &cobra.Command{
-	Use:   "create --db-path <path>",
-	Short: "Initialize a new database",
-	Long:  "Create a new WisDB database directory.\n\nThis creates the data, log, transaction, and metadata files inside\nthe specified directory. The directory will be created if it does\nnot already exist.",
-	Example: `  wisdb-server create --db-path ./mydb`,
-	Args: cobra.NoArgs,
-	RunE: runCreate,
+	Use:     "create --db-path <path>",
+	Short:   "Initialize a new database",
+	Long:    "Create a new WisDB database directory.\n\nThis creates the data, log, transaction, and metadata files inside\nthe specified directory. The directory will be created if it does\nnot already exist.",
+	Example: "  wisdb-server create --db-path ./mydb",
+	Args:    cobra.NoArgs,
+	RunE:    runCreate,
 }
 
 var (
@@ -78,6 +78,9 @@ var (
 func init() {
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(createCmd)
+	setHelpTemplates(rootCmd)
+	setHelpTemplates(serveCmd)
+	setHelpTemplates(createCmd)
 
 	serveCmd.Flags().StringVarP(&serveDBPath, "db-path", "d", "", "Path to database directory (required)")
 	serveCmd.Flags().StringVarP(&serveMem, "mem", "m", "64MB", "Memory budget for page cache")
@@ -94,16 +97,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid --mem value %q: %w", serveMem, err)
 	}
+	fmt.Println(utils.BoldText("\n  WisDB") + " " + utils.DimText("v"+version))
+	fmt.Println(utils.DimText("  listening on " + serveNet + "://" + serveAddr + "\n"))
 	openDB(serveDBPath, mem, serveNet, serveAddr)
 	return nil
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
 	if dbExists(createDBPath) {
-		return fmt.Errorf("database already exists at %q — use 'serve' to open it", createDBPath)
+		return fmt.Errorf("database already exists at %q \u2014 use 'serve' to open it", createDBPath)
 	}
 	createDB(createDBPath)
-	fmt.Printf("Database created at %q.\n", createDBPath)
+	fmt.Printf("\n  "+utils.GreenText("ok")+"  database created at %s\n\n", createDBPath)
 	return nil
 }
 
@@ -113,7 +118,6 @@ func dbPrefix(path string) string {
 
 func openDB(path string, mem int64, network, addr string) {
 	prefix := dbPrefix(path)
-
 	tm0, _ := tm.Open(prefix)
 	dm0, err := dm.Open(prefix, mem, tm0)
 	if err != nil {
@@ -125,13 +129,11 @@ func openDB(path string, mem int64, network, addr string) {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-
 	go func() {
 		<-sig
 		utils.Info("Shutting down...")
 		sv.Close()
 	}()
-
 	sv.Start()
 
 	if err := dm0.Close(); err != nil {
@@ -147,9 +149,7 @@ func createDB(path string) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		utils.Fatal("Failed to create database directory:", err)
 	}
-
 	prefix := dbPrefix(path)
-
 	tm, _ := tm.Create(prefix)
 	dm, err := dm.Create(prefix, defaultMem, tm)
 	if err != nil {
@@ -167,13 +167,12 @@ func createDB(path string) {
 
 func dbExists(path string) bool {
 	prefix := dbPrefix(path)
-	paths := []string{
+	for _, p := range []string{
 		prefix + pcacher.SUFFIX_DB,
 		prefix + logger.SUFFIX_LOG,
 		prefix + tm.XID_SUFFIX,
 		prefix + ".bt",
-	}
-	for _, p := range paths {
+	} {
 		if _, err := os.Stat(p); err == nil {
 			return true
 		}
@@ -185,13 +184,11 @@ func parseMem(memStr string) (int64, error) {
 	if memStr == "" {
 		return defaultMem, nil
 	}
-	length := len(memStr)
-	if length < 2 {
+	if len(memStr) < 2 {
 		return 0, fmt.Errorf("memory size must include a unit suffix (KB, MB, GB)")
 	}
-
-	unit := memStr[length-2:]
-	num, err := utils.StrToUint64(memStr[:length-2])
+	unit := memStr[len(memStr)-2:]
+	num, err := utils.StrToUint64(memStr[:len(memStr)-2])
 	if err != nil {
 		return 0, fmt.Errorf("invalid number: %w", err)
 	}
@@ -203,6 +200,6 @@ func parseMem(memStr string) (int64, error) {
 	case "GB":
 		return int64(num) * _GB, nil
 	default:
-		return 0, fmt.Errorf("unknown unit %q — use KB, MB, or GB", unit)
+		return 0, fmt.Errorf("unknown unit %q \u2014 use KB, MB, or GB", unit)
 	}
 }
