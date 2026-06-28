@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"mydb/src/main/backend/config"
 	"fmt"
 	"os"
 	"os/signal"
@@ -33,7 +34,7 @@ var (
 	ErrDBExists   = errors.New("database already exists at this path — use -open instead of -create")
 )
 
-func openDB(path string, mem int64) {
+func openDB(path string, cfg *config.Config, mem int64) {
 	tm0 := tm.Open(path)
 	dm0 := dm.Open(path, mem, tm0)
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
@@ -56,7 +57,7 @@ func openDB(path string, mem int64) {
 	utils.Info("Database closed.")
 }
 
-func createDB(path string) {
+func createDB(path string, cfg *config.Config) {
 	if dbExists(path) {
 		panic(ErrDBExists)
 	}
@@ -87,17 +88,29 @@ func main() {
 	open := flag.String("open", "", "-open DBPath")
 	create := flag.String("create", "", "-create DBPath")
 	memStr := flag.String("mem", "", "-mem 64MB")
+	configPath := flag.String("config", "wisdb.yaml", "-config config.yaml")
 	flag.Parse()
 
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *memStr != "" {
+		cfg.Memory = *memStr
+	}
+
 	if *open != "" {
-		openDB(*open, parseMem(*memStr))
+		openDB(*open, cfg, parseMem(cfg.Memory))
 		return
 	}
 	if *create != "" {
-		createDB(*create)
+		createDB(*create, cfg)
 		return
 	}
-	fmt.Println("Usage: launcher (open|create) DBPath")
+	fmt.Println("Usage: launcher -open DBPath [-config config.yaml] [-mem 64MB]")
+	fmt.Println("       launcher -create DBPath")
 }
 
 func parseMem(memStr string) int64 {

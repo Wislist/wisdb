@@ -28,7 +28,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 	dm0 := dm.Create(base, mem, tm0)
 	sm0 := NewSerializabilityManager(tm0, dm0)
 
-	xid1 := sm0.Begin(0)
+	xid1, _ := sm0.Begin(0)
 	uidAlive, err := sm0.Insert(xid1, []byte("alive"))
 	if err != nil {
 		t.Fatalf("Insert alive error: %v", err)
@@ -37,7 +37,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 		t.Fatalf("Commit xid1 error: %v", err)
 	}
 
-	xid2 := sm0.Begin(0)
+	xid2, _ := sm0.Begin(0)
 	uidDelete, err := sm0.Insert(xid2, []byte("to-delete"))
 	if err != nil {
 		t.Fatalf("Insert to-delete error: %v", err)
@@ -46,7 +46,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 		t.Fatalf("Commit xid2 error: %v", err)
 	}
 
-	xid3 := sm0.Begin(0)
+	xid3, _ := sm0.Begin(0)
 	deleted, err := sm0.Delete(xid3, uidDelete)
 	if err != nil {
 		t.Fatalf("Delete error: %v", err)
@@ -58,7 +58,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 		t.Fatalf("Commit xid3 error: %v", err)
 	}
 
-	xid4 := sm0.Begin(0)
+	xid4, _ := sm0.Begin(0)
 	aliveData, aliveOK := mustRead(t, sm0, xid4, uidAlive)
 	if !aliveOK || !bytes.Equal(aliveData, []byte("alive")) {
 		t.Fatalf("alive record mismatch, ok=%v data=%v", aliveOK, aliveData)
@@ -69,14 +69,14 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 	}
 	sm0.Abort(xid4)
 
-	xid5 := sm0.Begin(0)
+	xid5, _ := sm0.Begin(0)
 	uidAbort, err := sm0.Insert(xid5, []byte("abort-me"))
 	if err != nil {
 		t.Fatalf("Insert abort-me error: %v", err)
 	}
 	sm0.Abort(xid5)
 
-	xid6 := sm0.Begin(0)
+	xid6, _ := sm0.Begin(0)
 	_, abortVisible := mustRead(t, sm0, xid6, uidAbort)
 	if abortVisible {
 		t.Fatalf("aborted record should not be visible")
@@ -94,7 +94,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 		tm1.Close()
 	}()
 
-	xid7 := sm1.Begin(0)
+	xid7, _ := sm1.Begin(0)
 	aliveData2, aliveOK2 := mustRead(t, sm1, xid7, uidAlive)
 	if !aliveOK2 || !bytes.Equal(aliveData2, []byte("alive")) {
 		t.Fatalf("reopen alive mismatch, ok=%v data=%v", aliveOK2, aliveData2)

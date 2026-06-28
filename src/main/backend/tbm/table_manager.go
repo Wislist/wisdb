@@ -264,7 +264,10 @@ func (tbm *tableManager) Begin(begin *statement.Begin) (tm.XID, []byte) {
 	if begin.IsRepeatableRead {
 		level = 1
 	}
-	xid := tbm.SM.Begin(level)
+	xid, err := tbm.SM.Begin(level)
+	if err != nil {
+		return 0, nil
+	}
 	return xid, []byte("begin")
 }
 

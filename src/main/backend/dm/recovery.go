@@ -106,7 +106,7 @@ func undoTransactions(tm0 tm.TransactionManager,lg logger.Logger, pc pcacher.Pca
 				doUpdateLog(pc,log,_UNDO) // 用旧数据
 			}
 		}
-		tm0.Abort(xid)
+		tm0.Abort(xid) // best-effort during recovery
 	}
 }
 

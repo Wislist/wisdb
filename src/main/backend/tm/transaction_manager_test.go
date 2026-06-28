@@ -27,7 +27,7 @@ func TestMultiThread(t *testing.T) {
 			if op == 0 { // Begin or Terminate
 				lock.Lock()
 				if inTrans == false { // Begin a new transaction
-					xid := tmger.Begin()
+					xid, _ := tmger.Begin()
 					transMap[xid] = 0 // Set xid to active
 					tranXID = xid
 					inTrans = true

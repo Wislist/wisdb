@@ -37,13 +37,13 @@ func TestRC_NoDirtyRead(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(t1, []byte("dirty"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
-	t2 := sm0.Begin(0)
+	t2, _ := sm0.Begin(0)
 	_, ok, err := sm0.Read(t2, uid)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -60,7 +60,7 @@ func TestRC_ReadAfterCommit(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(t1, []byte("committed"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
@@ -69,7 +69,7 @@ func TestRC_ReadAfterCommit(t *testing.T) {
 		t.Fatalf("commit t1: %v", err)
 	}
 
-	t2 := sm0.Begin(0)
+	t2, _ := sm0.Begin(0)
 	data, ok, err := sm0.Read(t2, uid)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -86,7 +86,7 @@ func TestRC_AllowsNonRepeatableRead(t *testing.T) {
 	defer cleanup()
 
 	// 先提交一条初始数据
-	setup := sm0.Begin(0)
+	setup, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(setup, []byte("v1"))
 	if err != nil {
 		t.Fatalf("insert v1: %v", err)
@@ -95,14 +95,14 @@ func TestRC_AllowsNonRepeatableRead(t *testing.T) {
 		t.Fatalf("commit setup: %v", err)
 	}
 
-	t2 := sm0.Begin(0)
+	t2, _ := sm0.Begin(0)
 	data1, ok1, _ := sm0.Read(t2, uid)
 	if !ok1 {
 		t.Fatal("first read should succeed")
 	}
 
 	// T1 删除旧版本并插入新版本后提交
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	if _, err := sm0.Delete(t1, uid); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestRR_RepeatableRead(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	setup := sm0.Begin(0)
+	setup, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(setup, []byte("stable"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
@@ -144,14 +144,14 @@ func TestRR_RepeatableRead(t *testing.T) {
 		t.Fatalf("commit setup: %v", err)
 	}
 
-	t2 := sm0.Begin(1) // RR
+	t2, _ := sm0.Begin(1) // RR
 	data1, ok1, _ := sm0.Read(t2, uid)
 	if !ok1 {
 		t.Fatal("first read should succeed")
 	}
 
 	// T1 删除后提交
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	if _, err := sm0.Delete(t1, uid); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -172,9 +172,9 @@ func TestRR_SnapshotIsolation(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	t2 := sm0.Begin(1) // T2 先开始，建立快照
+	t2, _ := sm0.Begin(1) // T2 先开始，建立快照
 
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(t1, []byte("new"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
@@ -196,7 +196,7 @@ func TestRR_VersionSkipDetected(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	setup := sm0.Begin(0)
+	setup, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(setup, []byte("original"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
@@ -205,11 +205,11 @@ func TestRR_VersionSkipDetected(t *testing.T) {
 		t.Fatalf("commit setup: %v", err)
 	}
 
-	t2 := sm0.Begin(1) // T2 先开始，建立快照
+	t2, _ := sm0.Begin(1) // T2 先开始，建立快照
 	t2tx := sm0.tc[t2]
 
 	// T1 删除并提交（在 T2 快照之后）
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	if _, err := sm0.Delete(t1, uid); err != nil {
 		t.Fatalf("T1 delete: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestSelfVisibility(t *testing.T) {
 	defer cleanup()
 
 	for _, level := range []int{0, 1} {
-		xid := sm0.Begin(level)
+		xid, _ := sm0.Begin(level)
 		uid, err := sm0.Insert(xid, []byte("self"))
 		if err != nil {
 			t.Fatalf("level=%d insert: %v", level, err)
@@ -258,14 +258,14 @@ func TestAbortedDataInvisible(t *testing.T) {
 	sm0, cleanup := newSM(t)
 	defer cleanup()
 
-	t1 := sm0.Begin(0)
+	t1, _ := sm0.Begin(0)
 	uid, err := sm0.Insert(t1, []byte("ghost"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	sm0.Abort(t1)
 
-	t2 := sm0.Begin(0)
+	t2, _ := sm0.Begin(0)
 	_, ok, _ := sm0.Read(t2, uid)
 	if ok {
 		t.Fatal("aborted data should not be visible to other transactions")
@@ -290,7 +290,7 @@ func TestConcurrentInsertRead(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			xid := sm0.Begin(0)
+			xid, _ := sm0.Begin(0)
 			uid, err := sm0.Insert(xid, payloads[idx])
 			if err != nil {
 				errCh <- err
@@ -312,7 +312,7 @@ func TestConcurrentInsertRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := sm0.Begin(0)
+	reader, _ := sm0.Begin(0)
 	for i := 0; i < n; i++ {
 		data, ok, err := sm0.Read(reader, uids[i])
 		if err != nil || !ok || !bytes.Equal(data, payloads[i]) {

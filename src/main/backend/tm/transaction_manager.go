@@ -29,13 +29,13 @@ const (
 )
 
 type TransactionManager interface {
-	Begin() XID
-	Commit(xid XID)
-	Abort(xid XID)
+	Begin() (XID, error)
+	Commit(xid XID) error
+	Abort(xid XID) error
 	IsActive(xid XID) bool
 	IsCommitted(xid XID) bool
 	IsAborted(xid XID) bool
-	Close()
+	Close() error
 }
 
 type transactionManager struct {
@@ -108,69 +108,64 @@ func xidPosition(xid XID) (int64, int) {
 }
 
 // 更新事务状态 updateXID
-func (t *transactionManager) updateXID(xid XID, status byte) {
+func (t *transactionManager) updateXID(xid XID, status byte) error {
 	offset, length  := xidPosition(xid)
 	tmp := make([]byte, length)
 	tmp[0] = status
 	_, err := t.file.WriteAt(tmp, offset)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	err = t.file.Sync()
-	if err != nil {
-		panic(err)
-	}
+	return t.file.Sync()
 }
 
 // XID+1 并更新XID Header incrXIDCounter
-func (t *transactionManager) incrXIDCounter() {
+func (t *transactionManager) incrXIDCounter() error {
 	t.xidCounter++
 	buf := utils.Uint64ToRaw(uint64(t.xidCounter))
 	_, err := t.file.WriteAt(buf, 0)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	err = t.file.Sync()
-	if err != nil {
-		panic(err)
-	}
+	return t.file.Sync()
 }
 
 /*
 *
 返回一个XID作为Header
 */
-func (t *transactionManager) Begin() XID {
-	//先上锁
+func (t *transactionManager) Begin() (XID, error) {
 	t.counterLock.Lock()
 	defer t.counterLock.Unlock()
 
 	xid := t.xidCounter + 1
-	//事务置为0 表示开始事务
-	t.updateXID(xid, FIELD_TRAN_ACTIVE)
-	t.incrXIDCounter()
-	return xid
+	if err := t.updateXID(xid, FIELD_TRAN_ACTIVE); err != nil {
+		return 0, err
+	}
+	if err := t.incrXIDCounter(); err != nil {
+		return 0, err
+	}
+	return xid, nil
 }
 
 /**
 commit事务
 */
 
-func (t *transactionManager) Commit(xid XID) {
-	//表示提交
+func (t *transactionManager) Commit(xid XID) error {
 	t.counterLock.Lock()
 	defer t.counterLock.Unlock()
-	t.updateXID(xid, byte(FIELD_TRAN_COMMITTED))
+	return t.updateXID(xid, byte(FIELD_TRAN_COMMITTED))
 }
 
 /*
 *
 回滚事务
 */
-func (t *transactionManager) Abort(xid XID) {
+func (t *transactionManager) Abort(xid XID) error {
 	t.counterLock.Lock()
 	defer t.counterLock.Unlock()
-	t.updateXID(xid, byte(FIELD_TRAN_ABORTED))
+	return t.updateXID(xid, byte(FIELD_TRAN_ABORTED))
 }
 
 /*
@@ -181,7 +176,7 @@ func (t *transactionManager) checkXID(xid XID, status byte) bool {
 	tmp := make([]byte, length)
 	_, err := t.file.ReadAt(tmp, offset)
 	if err != nil {
-		panic(err)
+		return false
 	}
 	return tmp[0] == status
 }
@@ -207,9 +202,6 @@ func (t *transactionManager) IsAborted(xid XID) bool {
 	return t.checkXID(xid, FIELD_TRAN_ABORTED)
 }
 
-func (t *transactionManager) Close() {
-	err := t.file.Close()
-	if err != nil {
-		panic(err)
-	}
+func (t *transactionManager) Close() error {
+	return t.file.Close()
 }

@@ -24,9 +24,9 @@ type SerializabilityManager interface {
 	Insert(xid tm.XID, data []byte) (utils.UUID, error)
 	Delete(xid tm.XID, uuid utils.UUID) (bool, error)
 
-	Begin(level int) tm.XID
+	Begin(level int) (tm.XID, error)
 	Commit(xid tm.XID) error
-	Abort(xid tm.XID)
+	Abort(xid tm.XID) error
 }
 
 type serializabilityManager struct {
@@ -172,14 +172,17 @@ func (sm *serializabilityManager) Read(xid tm.XID, uuid utils.UUID) ([]byte, boo
 	}
 }
 
-func (sm *serializabilityManager) Begin(level int) tm.XID {
+func (sm *serializabilityManager) Begin(level int) (tm.XID, error) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	xid := sm.TM.Begin()
+	xid, err := sm.TM.Begin()
+	if err != nil {
+		return 0, err
+	}
 	t := newTransaction(xid, level, sm.tc)
 	sm.tc[xid] = t
-	return xid
+	return xid, nil
 }
 
 func (sm *serializabilityManager) Commit(xid tm.XID) error {
@@ -197,11 +200,13 @@ func (sm *serializabilityManager) Commit(xid tm.XID) error {
 	sm.lock.Unlock()
 
 	sm.lt.Remove(utils.UUID(xid))
-	sm.TM.Commit(xid)
+	if err := sm.TM.Commit(xid); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (sm *serializabilityManager) abort(xid tm.XID, auto bool) {
+func (sm *serializabilityManager) abort(xid tm.XID, auto bool) error {
 	sm.lock.Lock()
 	t := sm.tc[xid]
 	if auto == false {
@@ -210,16 +215,16 @@ func (sm *serializabilityManager) abort(xid tm.XID, auto bool) {
 	sm.lock.Unlock()
 
 	if t.AutoAbortted == true {
-		return
+		return nil
 	}
 
 	sm.lt.Remove(utils.UUID(xid))
-	sm.TM.Abort(xid)
+	return sm.TM.Abort(xid)
 }
 
 // Abort 手动撤销事务
-func (sm *serializabilityManager) Abort(xid tm.XID) {
-	sm.abort(xid, false)
+func (sm *serializabilityManager) Abort(xid tm.XID) error {
+	return sm.abort(xid, false)
 }
 
 func (sm *serializabilityManager) ReleaseEntry(e *entry) {
