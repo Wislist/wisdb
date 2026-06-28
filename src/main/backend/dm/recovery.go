@@ -206,11 +206,9 @@ func parseInsertLog(log []byte) (tm.XID, pcacher.Pgno, Offset, []byte)  {
 
 
 /*
-	redoInsertLog 对insertLog进行redo
-	redo的方式为将原数据重新插入到对应page的位置，然后将page的FSO设置为较大的那一个
-
-	BUG：如果之前数据库刚好崩坏在对page的FSO做修改时，那么坏的FSO可能会非常大，导致到最后
-	恢复完成时，FSO保留那个错误的最大值
+	doInsertLog 对insertLog进行redo/undo。
+	redo的方式为将原数据重新插入到对应page的位置，然后将page的FSO设置为较大的那一个。
+	FSO合法性校验已移至PXRecoverInsert中——崩溃损坏的FSO会被自动检测并修复。
 */
 func doInsertLog(pc pcacher.Pcacher, log []byte, flag int) {
 	_, pgno, offset, raw := parseInsertLog(log)

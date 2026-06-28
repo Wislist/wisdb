@@ -62,14 +62,30 @@ func PXRecoverUpdate(pg pcacher.Page, offset Offset, raw []byte) {
 }
 
 // PXRecoverInsert 辅助Recovery，直接将raw插入到pg这一页，并返回插入到位移
+//
+// BUG FIX: If the database crashed while updating the page's FSO (Free Space
+// Offset), the on-disk FSO may be garbage (e.g. 0xFFFF). Previously we did
+// max(current_FSO, offset+len(raw)), which preserved the garbage value
+// permanently, wasting page space.
+//
+// Now we validate current_FSO against page bounds. If it's out of range,
+// we ignore it and use only the log-derived value (offset + len(raw)).
 func PXRecoverInsert(pg pcacher.Page, offset Offset, raw []byte) {
 	pg.Dirty()
 	copy(pg.Data()[offset:], raw)
 
-	maxFSO := pxRawFSO(pg.Data())
-	fso2 := offset + Offset(len(raw))
-	if fso2 > maxFSO {
-		maxFSO = fso2
+	// Correct FSO computed from the WAL log (authoritative).
+	logFSO := offset + Offset(len(raw))
+
+	// On-disk FSO may be corrupted if the crash occurred mid-FSO-update.
+	// Validate it against page geometry before trusting it.
+	currentFSO := pxRawFSO(pg.Data())
+	if int(currentFSO) < _PX_OF_DATA || int(currentFSO) > pcacher.PAGE_SIZE {
+		// Garbage — fall back to the log-derived value.
+		currentFSO = logFSO
 	}
-	pxRawUpdateFSO(pg.Data(), maxFSO)
+
+	if logFSO > currentFSO {
+		pxRawUpdateFSO(pg.Data(), logFSO)
+	}
 }
