@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"os"
+		"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -97,8 +97,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid --mem value %q: %w", serveMem, err)
 	}
-	fmt.Println(utils.BoldText("\n  WisDB") + " " + utils.DimText("v"+version))
-	fmt.Println(utils.DimText("  listening on " + serveNet + "://" + serveAddr + "\n"))
+	addrStr := serveNet + "://" + serveAddr
+	fmt.Println("")
+	fmt.Println("  " + utils.Color(utils.Blue, "███") + " " + utils.BoldText("WisDB") + "  " + utils.DimText("v"+version))
+	fmt.Println("  " + utils.DimText(addrStr) + "\n")
 	openDB(serveDBPath, mem, serveNet, serveAddr)
 	return nil
 }
