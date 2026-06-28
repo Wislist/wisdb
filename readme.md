@@ -10,14 +10,15 @@ go build -o wisdb-server ./src/main/backend/cmd/
 go build -o wisdb-client ./src/main/client/
 
 # Create database
-./wisdb-server -create ./mydb
+./wisdb-server create --db-path ./mydb
 
 # Start server
-./wisdb-server -open ./mydb                   # defaults: tcp, :3307, 64MB
-./wisdb-server -open ./mydb -mem 128MB -addr :4000
+./wisdb-server serve --db-path ./mydb                     # defaults: tcp, :3307, 64MB
+./wisdb-server serve --db-path ./mydb --mem 128MB --addr :4000
 
 # Connect
 ./wisdb-client
+./wisdb-client --addr :4000
 ```
 
 ```sql
@@ -31,6 +32,23 @@ select count(*) from user
 commit
 ```
 
+## CLI Reference
+
+### Server
+
+```
+wisdb-server serve  --db-path <path> [--mem 64MB] [--addr :3307] [--net tcp]
+wisdb-server create --db-path <path>
+wisdb-server --version
+```
+
+### Client
+
+```
+wisdb-client [--addr :3307] [--net tcp]
+wisdb-client --version
+```
+
 ## Documentation
 
 | Document | Description |
@@ -38,8 +56,6 @@ commit
 | [Architecture](doc/architecture.md) | Module design and data flow |
 | [Getting Started](doc/getting-started.md) | Build, run, CLI flags, driver usage, tests |
 | [SQL Reference](doc/sql-reference.md) | Full syntax: DDL, DML, ORDER BY, LIMIT, aggregates |
-
-中文文档：[README_zh.md](README_zh.md)
 
 ## Features
 

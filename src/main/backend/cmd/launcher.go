@@ -1,13 +1,13 @@
 package main
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/spf13/cobra"
 
 	"mydb/src/main/backend/dm"
 	"mydb/src/main/backend/dm/logger"
@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultMem  = (1 << 20) * 64 // 64MB
+	defaultMem  = (1 << 20) * 64
 	defaultNet  = "tcp"
 	defaultAddr = ":3307"
 	version     = "0.2.0"
@@ -32,114 +32,81 @@ const (
 	_GB = 1 << 30
 )
 
+func main() {
+	cobra.EnableCommandSorting = false
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+var rootCmd = &cobra.Command{
+	Use:     "wisdb-server",
+	Short:   "WisDB — a lightweight KV-based relational database",
+	Version: version,
+	Long:    "WisDB is a lightweight KV-based relational database prototype written in Go.\nIt features MVCC transactions, WAL recovery, B+Tree indexing, and a TCP\nclient interface with SQL support.\n\nAll database files are stored inside a single directory.",
+	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
+	SilenceUsage:      true,
+}
+
+var serveCmd = &cobra.Command{
+	Use:   "serve --db-path <path> [flags]",
+	Short: "Start the database server",
+	Long:  "Start the WisDB server, listening for client connections.\n\nThe database directory must already exist and contain a valid WisDB\ndatabase (use 'create' to initialize one).",
+	Example: `  wisdb-server serve --db-path ./mydb
+  wisdb-server serve --db-path ./mydb --mem 128MB --addr :4000`,
+	Args: cobra.NoArgs,
+	RunE: runServe,
+}
+
+var createCmd = &cobra.Command{
+	Use:   "create --db-path <path>",
+	Short: "Initialize a new database",
+	Long:  "Create a new WisDB database directory.\n\nThis creates the data, log, transaction, and metadata files inside\nthe specified directory. The directory will be created if it does\nnot already exist.",
+	Example: `  wisdb-server create --db-path ./mydb`,
+	Args: cobra.NoArgs,
+	RunE: runCreate,
+}
+
 var (
-	ErrInvalidMem = errors.New("invalid memory size — use format like 64MB, 128MB, 1GB")
+	serveDBPath  string
+	serveMem     string
+	serveNet     string
+	serveAddr    string
+	createDBPath string
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		printServerUsage()
-		os.Exit(1)
-	}
+func init() {
+	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(createCmd)
 
-	switch os.Args[1] {
-	case "serve":
-		serveCmd()
-	case "create":
-		createCmd()
-	case "--version", "-v":
-		fmt.Println("wisdb-server", version)
-	case "--help", "-h", "help":
-		printServerUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
-		printServerUsage()
-		os.Exit(1)
-	}
+	serveCmd.Flags().StringVarP(&serveDBPath, "db-path", "d", "", "Path to database directory (required)")
+	serveCmd.Flags().StringVarP(&serveMem, "mem", "m", "64MB", "Memory budget for page cache")
+	serveCmd.Flags().StringVar(&serveNet, "net", defaultNet, "Network type (tcp, unix)")
+	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", defaultAddr, "Listen address")
+	serveCmd.MarkFlagRequired("db-path")
+
+	createCmd.Flags().StringVarP(&createDBPath, "db-path", "d", "", "Path for new database directory (required)")
+	createCmd.MarkFlagRequired("db-path")
 }
 
-func printServerUsage() {
-	fmt.Print(`WisDB — a lightweight KV-based relational database.
-
-Usage:
-  wisdb-server serve  --db-path <path> [flags]
-  wisdb-server create --db-path <path>
-  wisdb-server --version
-
-Commands:
-  serve     Start the database server.
-  create    Initialize a new database at the given path.
-
-Serve flags:
-  --db-path  PATH   Path to the database directory (required).
-  --mem      SIZE   Memory budget for page cache (default: 64MB).
-  --addr     ADDR   Listen address (default: ":3307").
-  --net      NET    Network type: tcp, unix (default: "tcp").
-
-All database files are stored inside <db-path>/ — the path is a directory.
-
-Examples:
-  wisdb-server create --db-path ./mydb
-  wisdb-server serve  --db-path ./mydb
-  wisdb-server serve  --db-path ./mydb --mem 128MB --addr :4000
-`)
-}
-
-func serveCmd() {
-	flags := flag.NewFlagSet("serve", flag.ExitOnError)
-	dbPath := flags.String("db-path", "", "Path to database directory")
-	memStr := flags.String("mem", "64MB", "Memory budget (64MB, 128MB, 1GB)")
-	network := flags.String("net", defaultNet, "Network type (tcp, unix)")
-	addr := flags.String("addr", defaultAddr, "Listen address")
-
-	flags.Usage = func() {
-		fmt.Print("Usage: wisdb-server serve --db-path <path> [flags]\n\nFlags:\n")
-		flags.PrintDefaults()
-	}
-	flags.Parse(os.Args[2:])
-
-	if *dbPath == "" {
-		fmt.Fprintln(os.Stderr, "error: --db-path is required")
-		flags.Usage()
-		os.Exit(1)
-	}
-
-	mem, err := parseMem(*memStr)
+func runServe(cmd *cobra.Command, args []string) error {
+	mem, err := parseMem(serveMem)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: invalid --mem value %q: %v\n", *memStr, err)
-		os.Exit(1)
+		return fmt.Errorf("invalid --mem value %q: %w", serveMem, err)
 	}
-
-	openDB(*dbPath, mem, *network, *addr)
+	openDB(serveDBPath, mem, serveNet, serveAddr)
+	return nil
 }
 
-func createCmd() {
-	flags := flag.NewFlagSet("create", flag.ExitOnError)
-	dbPath := flags.String("db-path", "", "Path for new database directory")
-
-	flags.Usage = func() {
-		fmt.Print("Usage: wisdb-server create --db-path <path>\n\nFlags:\n")
-		flags.PrintDefaults()
+func runCreate(cmd *cobra.Command, args []string) error {
+	if dbExists(createDBPath) {
+		return fmt.Errorf("database already exists at %q — use 'serve' to open it", createDBPath)
 	}
-	flags.Parse(os.Args[2:])
-
-	if *dbPath == "" {
-		fmt.Fprintln(os.Stderr, "error: --db-path is required")
-		flags.Usage()
-		os.Exit(1)
-	}
-
-	if dbExists(*dbPath) {
-		fmt.Fprintf(os.Stderr, "error: database already exists at %q — use 'serve' to open it\n", *dbPath)
-		os.Exit(1)
-	}
-
-	createDB(*dbPath)
+	createDB(createDBPath)
+	fmt.Printf("Database created at %q.\n", createDBPath)
+	return nil
 }
 
-// dbPrefix returns the path prefix used by all storage modules inside the
-// database directory. Files live under <path>/wisdb.* so only files owned
-// by WisDB appear inside the user-specified directory.
 func dbPrefix(path string) string {
 	return filepath.Join(path, "wisdb")
 }

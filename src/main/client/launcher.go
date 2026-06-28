@@ -1,11 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net"
 	"os"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"mydb/src/main/client/client"
 	"mydb/src/main/transporter"
@@ -18,65 +19,47 @@ const (
 )
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "--version", "-v":
-			fmt.Println("wisdb-client", version)
-			return
-		case "--help", "-h", "help":
-			printClientUsage()
-			return
-		}
+	cobra.EnableCommandSorting = false
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
-
-	connectCmd()
 }
 
-func printClientUsage() {
-	fmt.Print(`WisDB Client — interactive SQL shell.
+var rootCmd = &cobra.Command{
+	Use:     "wisdb-client [--addr <address>]",
+	Short:   "WisDB Client — interactive SQL shell",
+	Version: version,
+	Long: `WisDB Client connects to a WisDB server and provides an interactive
+SQL shell with readline-style input, command history, and auto-reconnect.
 
-Usage:
-  wisdb-client [flags]
-  wisdb-client --version
-
-Flags:
-  --addr  ADDR   Server address (default: ":3307").
-  --net   NET    Network type: tcp, unix (default: "tcp").
-
-Examples:
-  wisdb-client
+Type SQL statements directly at the prompt. Use 'begin' / 'commit' /
+'abort' for transactions, and 'exit' or Ctrl+D to quit.`,
+	Example: `  wisdb-client
   wisdb-client --addr :4000
-  wisdb-client --addr 192.168.1.10:3307
-`)
+  wisdb-client --addr 192.168.1.10:3307`,
+	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
+	SilenceUsage:      true,
+	RunE:              runConnect,
 }
 
-func connectCmd() {
-	flags := flag.NewFlagSet("connect", flag.ExitOnError)
-	network := flags.String("net", defaultNet, "Network type (tcp, unix)")
-	addr := flags.String("addr", defaultAddr, "Server address")
+var (
+	clientNet  string
+	clientAddr string
+)
 
-	flags.Usage = func() {
-		fmt.Print("Usage: wisdb-client [flags]\n\nFlags:\n")
-		flags.PrintDefaults()
-	}
+func init() {
+	rootCmd.Flags().StringVarP(&clientAddr, "addr", "a", defaultAddr, "Server address")
+	rootCmd.Flags().StringVar(&clientNet, "net", defaultNet, "Network type (tcp, unix)")
+}
 
-	// Parse remaining args (skip program name + subcommand if present)
-	args := os.Args[1:]
-	if len(args) > 0 && (args[0] == "connect") {
-		args = args[1:]
-	}
-	flags.Parse(args)
-
-	fmt.Printf("Connecting to %s://%s ...\n", *network, *addr)
-	pkger := dial(*network, *addr)
-	fmt.Printf("Connected to %s\n", *addr)
+func runConnect(cmd *cobra.Command, args []string) error {
+	pkger := dial(clientNet, clientAddr)
 
 	clt := client.NewClient(pkger)
 
 	reconnect := func() (client.Client, <-chan struct{}) {
 		clt.Close()
-		pkger := dial(*network, *addr)
-		fmt.Printf("Reconnected to %s\n", *addr)
+		pkger := dial(clientNet, clientAddr)
 		clt.Reconnect(pkger)
 		return clt, clt.Disconnected()
 	}
@@ -84,12 +67,15 @@ func connectCmd() {
 	shell := client.NewShellWithReconnect(clt, reconnect)
 	shell.SetDisconnCh(clt.Disconnected())
 	shell.Run()
+	return nil
 }
 
 func dial(network, addr string) transporter.Packager {
+	fmt.Printf("Connecting to %s://%s ...\n", network, addr)
 	for {
 		conn, err := net.Dial(network, addr)
 		if err == nil {
+			fmt.Printf("Connected to %s\n", addr)
 			pro := transporter.NewWireProtocoler()
 			trs := transporter.NewWireTransporter(conn)
 			return transporter.NewPackager(trs, pro)
