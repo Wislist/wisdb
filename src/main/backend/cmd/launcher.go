@@ -99,23 +99,22 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	addrStr := serveNet + "://" + serveAddr
+	c := utils.Cyan
 
-	// ASCII art logo
 	logo := "" +
-		"  " + utils.Color(utils.Cyan, "╔══════════════════════════════╗") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "                                  " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ██╗ ██╗ █████╗ █████╗ █████╗    " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ ██╔══╝ ██╔══╝ ██╔══╝    " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ █████╗ █████╗ ██║       " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ ╚══██║ ╚══██║ ██║       " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ╚██║ ████╔╝ ████╔╝ █████╗   " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "   ╚═╝  ╚═╝ ╚════╝ ╚════╝ ╚════╝    " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "      W    I    S    D    B         " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "║") + "                                  " + utils.Color(utils.Cyan, "║") + "\n" +
-		"  " + utils.Color(utils.Cyan, "╚══════════════════════════════╝")
+		"  " + utils.Color(c, "╔══════════════════════════════════════╗") + "\n" +
+		"  " + utils.Color(c, "║") + "                                      " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "   ██╗    ██╗ ██╗ ███████╗ ██████╗  ██████╗    " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "   ██║    ██║ ██║ ██╔════╝ ██╔══██╗ ██╔══██╗   " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "   ██║ █╗ ██║ ██║ ███████╗ ██║  ██║ ██████╔╝   " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "   ██║███╗██║ ██║ ╚════██║ ██║  ██║ ██╔══██╗   " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "   ╚███╔███╔╝ ██║ ███████║ ██████╔╝ ██████╔╝   " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "    ╚══╝╚══╝  ╚═╝ ╚══════╝ ╚═════╝  ╚═════╝    " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "║") + "                                      " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "╚══════════════════════════════════════╝")
 
 	fmt.Println("\n" + logo)
-	fmt.Println(utils.DimText("\n  " + addrStr + "\n"))
+	fmt.Println(utils.DimText("  " + addrStr + "  ") + utils.DimText("v"+version) + "\n")
 
 	openDB(serveDBPath, mem, serveNet, serveAddr)
 	return nil
