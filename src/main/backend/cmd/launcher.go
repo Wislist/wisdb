@@ -102,16 +102,16 @@ func runServe(cmd *cobra.Command, args []string) error {
 	c := utils.Cyan
 
 	logo := "" +
-		"  " + utils.Color(c, "╔══════════════════════════════════════╗") + "\n" +
-		"  " + utils.Color(c, "║") + "                                      " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "╔═══════════════════════════════════════════════╗") + "\n" +
+		"  " + utils.Color(c, "║") + "                                               " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "   ██╗    ██╗ ██╗ ███████╗ ██████╗  ██████╗    " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "   ██║    ██║ ██║ ██╔════╝ ██╔══██╗ ██╔══██╗   " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "   ██║ █╗ ██║ ██║ ███████╗ ██║  ██║ ██████╔╝   " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "   ██║███╗██║ ██║ ╚════██║ ██║  ██║ ██╔══██╗   " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "   ╚███╔███╔╝ ██║ ███████║ ██████╔╝ ██████╔╝   " + utils.Color(c, "║") + "\n" +
 		"  " + utils.Color(c, "║") + "    ╚══╝╚══╝  ╚═╝ ╚══════╝ ╚═════╝  ╚═════╝    " + utils.Color(c, "║") + "\n" +
-		"  " + utils.Color(c, "║") + "                                      " + utils.Color(c, "║") + "\n" +
-		"  " + utils.Color(c, "╚══════════════════════════════════════╝")
+		"  " + utils.Color(c, "║") + "                                               " + utils.Color(c, "║") + "\n" +
+		"  " + utils.Color(c, "╚═══════════════════════════════════════════════╝")
 
 	fmt.Println("\n" + logo)
 	fmt.Println(utils.DimText("  " + addrStr + "  ") + utils.DimText("v"+version) + "\n")
