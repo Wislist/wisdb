@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
 	"mydb/src/main/backend/dm"
 	"mydb/src/main/backend/dm/logger"
 	"mydb/src/main/backend/dm/pcacher"
@@ -18,7 +19,10 @@ import (
 )
 
 const (
-	_DEFAULT_MEM = (1 << 20) * 64 // 64MB
+	defaultMem  = (1 << 20) * 64 // 64MB
+	defaultNet  = "tcp"
+	defaultAddr = ":3307"
+	version     = "0.2.0"
 )
 
 const (
@@ -29,10 +33,109 @@ const (
 
 var (
 	ErrInvalidMem = errors.New("invalid memory size — use format like 64MB, 128MB, 1GB")
-	ErrDBExists   = errors.New("database already exists at this path — use -open instead of -create")
 )
 
-func openDB(path string, mem int64, net, addr string) {
+func main() {
+	if len(os.Args) < 2 {
+		printServerUsage()
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "serve":
+		serveCmd()
+	case "create":
+		createCmd()
+	case "--version", "-v":
+		fmt.Println("wisdb-server", version)
+	case "--help", "-h", "help":
+		printServerUsage()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
+		printServerUsage()
+		os.Exit(1)
+	}
+}
+
+func printServerUsage() {
+	fmt.Print(`WisDB — a lightweight KV-based relational database.
+
+Usage:
+  wisdb-server serve  --db-path <path> [flags]
+  wisdb-server create --db-path <path>
+  wisdb-server --version
+
+Commands:
+  serve     Start the database server.
+  create    Initialize a new database at the given path.
+
+Serve flags:
+  --db-path  PATH   Path to the database directory (required).
+  --mem      SIZE   Memory budget for page cache (default: 64MB).
+  --addr     ADDR   Listen address (default: ":3307").
+  --net      NET    Network type: tcp, unix (default: "tcp").
+
+Examples:
+  wisdb-server create --db-path ./mydb
+  wisdb-server serve  --db-path ./mydb
+  wisdb-server serve  --db-path ./mydb --mem 128MB --addr :4000
+`)
+}
+
+func serveCmd() {
+	flags := flag.NewFlagSet("serve", flag.ExitOnError)
+	dbPath := flags.String("db-path", "", "Path to database directory")
+	memStr := flags.String("mem", "64MB", "Memory budget (64MB, 128MB, 1GB)")
+	network := flags.String("net", defaultNet, "Network type (tcp, unix)")
+	addr := flags.String("addr", defaultAddr, "Listen address")
+
+	flags.Usage = func() {
+		fmt.Print("Usage: wisdb-server serve --db-path <path> [flags]\n\nFlags:\n")
+		flags.PrintDefaults()
+	}
+	flags.Parse(os.Args[2:])
+
+	if *dbPath == "" {
+		fmt.Fprintln(os.Stderr, "error: --db-path is required")
+		flags.Usage()
+		os.Exit(1)
+	}
+
+	mem, err := parseMem(*memStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: invalid --mem value %q: %v\n", *memStr, err)
+		os.Exit(1)
+	}
+
+	openDB(*dbPath, mem, *network, *addr)
+}
+
+func createCmd() {
+	flags := flag.NewFlagSet("create", flag.ExitOnError)
+	dbPath := flags.String("db-path", "", "Path for new database")
+
+	flags.Usage = func() {
+		fmt.Print("Usage: wisdb-server create --db-path <path>\n\nFlags:\n")
+		flags.PrintDefaults()
+	}
+	flags.Parse(os.Args[2:])
+
+	if *dbPath == "" {
+		fmt.Fprintln(os.Stderr, "error: --db-path is required")
+		flags.Usage()
+		os.Exit(1)
+	}
+
+	if dbExists(*dbPath) {
+		fmt.Fprintf(os.Stderr, "error: database already exists at %q — use 'serve' to open it\n", *dbPath)
+		os.Exit(1)
+	}
+
+	createDB(*dbPath)
+	fmt.Printf("Database created at %q.\n", *dbPath)
+}
+
+func openDB(path string, mem int64, network, addr string) {
 	tm0, _ := tm.Open(path)
 	dm0, err := dm.Open(path, mem, tm0)
 	if err != nil {
@@ -40,7 +143,7 @@ func openDB(path string, mem int64, net, addr string) {
 	}
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := tbm.Open(path, sm0, dm0)
-	sv := server.NewServer(net, addr, tbm0)
+	sv := server.NewServer(network, addr, tbm0)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -67,13 +170,10 @@ func openDB(path string, mem int64, net, addr string) {
 }
 
 func createDB(path string) {
-	if dbExists(path) {
-		panic(ErrDBExists)
-	}
 	tm, _ := tm.Create(path)
-	dm, err := dm.Create(path, _DEFAULT_MEM, tm)
+	dm, err := dm.Create(path, defaultMem, tm)
 	if err != nil {
-		panic(err)
+		utils.Fatal("Failed to create DM:", err)
 	}
 	sm := sm.NewSerializabilityManager(tm, dm)
 	tbm.Create(path, sm, dm)
@@ -100,48 +200,28 @@ func dbExists(path string) bool {
 	return false
 }
 
-func main() {
-	open := flag.String("open", "", "-open DBPath")
-	create := flag.String("create", "", "-create DBPath")
-	memStr := flag.String("mem", "64MB", "-mem 64MB")
-	net := flag.String("net", "tcp", "-net tcp")
-	addr := flag.String("addr", ":3307", "-addr :3307")
-	flag.Parse()
-
-	if *open != "" {
-		openDB(*open, parseMem(*memStr), *net, *addr)
-		return
-	}
-	if *create != "" {
-		createDB(*create)
-		return
-	}
-	fmt.Println("Usage: launcher -open DBPath [-mem 64MB] [-net tcp] [-addr :3307]")
-	fmt.Println("       launcher -create DBPath")
-}
-
-func parseMem(memStr string) int64 {
+func parseMem(memStr string) (int64, error) {
 	if memStr == "" {
-		return _DEFAULT_MEM
+		return defaultMem, nil
 	}
 	length := len(memStr)
 	if length < 2 {
-		panic(ErrInvalidMem)
+		return 0, fmt.Errorf("memory size must include a unit suffix (KB, MB, GB)")
 	}
 
-	memUint := memStr[length-2:]
-	memNum, err := utils.StrToUint64(memStr[:length-2])
+	unit := memStr[length-2:]
+	num, err := utils.StrToUint64(memStr[:length-2])
 	if err != nil {
-		panic(err)
+		return 0, fmt.Errorf("invalid number: %w", err)
 	}
-	switch memUint {
+	switch unit {
 	case "KB":
-		return int64(memNum) * _KB
+		return int64(num) * _KB, nil
 	case "MB":
-		return int64(memNum) * _MB
+		return int64(num) * _MB, nil
 	case "GB":
-		return int64(memNum) * _GB
+		return int64(num) * _GB, nil
 	default:
-		panic(ErrInvalidMem)
+		return 0, fmt.Errorf("unknown unit %q — use KB, MB, or GB", unit)
 	}
 }
