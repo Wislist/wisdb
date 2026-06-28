@@ -9,13 +9,13 @@ import (
 )
 
 type Logger interface {
-	Log(data []byte)
+	Log(data []byte) error
 	Truncate(x int64) error
 	//读取下一个log
-	Next() ([]byte, bool)
+	Next() ([]byte, bool, error)
 	//将日志指针移动到第一条指针的位置
 	Rewind()
-	Close()
+	Close() error
 }
 
 var (
@@ -43,10 +43,10 @@ type logger struct {
 	xChecksum uint32
 }
 
-func Open(path string) *logger {
+func Open(path string) (*logger, error) {
 	file, err := os.OpenFile(path+SUFFIX_LOG, os.O_RDWR, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	lg := new(logger)
@@ -54,46 +54,46 @@ func Open(path string) *logger {
 
 	err = lg.init()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return lg
+	return lg, nil
 }
 
-func Create(path string) *logger {
+func Create(path string) (*logger, error) {
 	file, err := os.OpenFile(path+SUFFIX_LOG, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	xChecksum := utils.Uint32ToRaw(0)
 	_, err = file.Write(xChecksum)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	err = file.Sync()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	log := new(logger)
 	log.file = file
 	log.xChecksum = 0
 
-	return log
+	return log, nil
 }
 
 // 这里需要锁 在更新
-func (lg *logger) updateXChecksum(log []byte) {
+func (lg *logger) updateXChecksum(log []byte) error {
 	lg.xChecksum = calChecksum(lg.xChecksum, log)
 	_, err := lg.file.WriteAt(utils.Uint32ToRaw(lg.xChecksum), 0)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	err = lg.file.Sync()
 	if err != nil {
-		panic(err)
+		return err
 	}
-
+	return nil
 }
 
 func calChecksum(accumulation uint32, data []byte) uint32 {
@@ -103,7 +103,7 @@ func calChecksum(accumulation uint32, data []byte) uint32 {
 	return accumulation
 }
 
-func (lg *logger) Log(data []byte) {
+func (lg *logger) Log(data []byte) error {
 	//包装日志数据 添加校验和长度头
 	log := warpLog(data)
 
@@ -111,14 +111,13 @@ func (lg *logger) Log(data []byte) {
 	defer lg.lock.Unlock()
 
 	_, err := lg.file.Write(log)
-	//如果这里写入失败 那么程序是没办法继续运行的 日志输入非常重要
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// Sync()会在updateXChecksum内进行
 	// 更新校验和
-	lg.updateXChecksum(log)
+	return lg.updateXChecksum(log)
 }
 
 func warpLog(data []byte) []byte {
@@ -175,19 +174,19 @@ func (lg *logger) next() ([]byte, bool, error) {
 	return log, true, nil
 }
 
-func (lg *logger) Next() ([]byte, bool) {
+func (lg *logger) Next() ([]byte, bool, error) {
 	lg.lock.Lock()
 	defer lg.lock.Unlock()
 
 	log, ok, err := lg.next()
 	if err != nil {
-		panic(err)
+		return nil, false, err
 	}
 	if ok == false {
-		return nil, false
+		return nil, false, nil
 	}
 
-	return log[_OF_DATA:], true
+	return log[_OF_DATA:], true, nil
 }
 
 // init方法
@@ -250,9 +249,6 @@ func (lg *logger) checkAndRemoveTail() error {
 
 
 
-func (lg *logger) Close() {
-	err := lg.file.Close()
-	if err != nil {
-		panic(err)
-	}
+func (lg *logger) Close() error {
+	return lg.file.Close()
 }

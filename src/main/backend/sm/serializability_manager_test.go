@@ -25,7 +25,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 	mem := int64(pcacher.PAGE_SIZE * 50)
 
 	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	dm0, _ := dm.Create(base, mem, tm0)
 	sm0 := NewSerializabilityManager(tm0, dm0)
 
 	xid1, _ := sm0.Begin(0)
@@ -87,7 +87,7 @@ func TestSerializabilityManagerLifecycle(t *testing.T) {
 	tm0.Close()
 
 	tm1 := tm.Open(base)
-	dm1 := dm.Open(base, mem, tm1)
+	dm1, _ := dm.Open(base, mem, tm1)
 	sm1 := NewSerializabilityManager(tm1, dm1)
 	defer func() {
 		dm1.Close()

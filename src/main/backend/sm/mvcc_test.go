@@ -22,7 +22,7 @@ func newSM(t *testing.T) (*serializabilityManager, func()) {
 	base := filepath.Join(t.TempDir(), "mvcc")
 	mem := int64(pcacher.PAGE_SIZE * 50)
 	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	dm0, _ := dm.Create(base, mem, tm0)
 	sm0 := NewSerializabilityManager(tm0, dm0)
 	return sm0, func() {
 		dm0.Close()

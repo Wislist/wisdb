@@ -26,7 +26,10 @@ func Recovery(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher) {
 	lg.Rewind()
 	var maxPgno pcacher.Pgno
 	for {
-		log,ok := lg.Next()
+		log, ok, err := lg.Next()
+		if err != nil {
+			panic(err)
+		}
 		if ok == false {
 			break
 		}
@@ -43,7 +46,9 @@ func Recovery(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher) {
 	if maxPgno == 0 {
 		maxPgno = 1
 	}
-	pc.TruncateByPgno(maxPgno)
+	if err := pc.TruncateByPgno(maxPgno); err != nil {
+		panic(err)
+	}
 	utils.Info("Truncate to",maxPgno,"pages.")
 
 	redoTransactions(tm,lg,pc)
@@ -56,7 +61,10 @@ func Recovery(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher) {
 func redoTransactions(tm tm.TransactionManager,lg logger.Logger, pc pcacher.Pcacher){
 	lg.Rewind()
 	for {
-		log,ok := lg.Next()
+		log, ok, err := lg.Next()
+		if err != nil {
+			panic(err)
+		}
 		if ok == false {
 			break
 		}
@@ -80,7 +88,10 @@ func undoTransactions(tm0 tm.TransactionManager,lg logger.Logger, pc pcacher.Pca
 	logCache := make(map[tm.XID][][]byte)
 	lg.Rewind()
 	for {
-		log , ok := lg.Next()
+		log, ok, err := lg.Next()
+		if err != nil {
+			panic(err)
+		}
 		if ok == false {
 			break
 		}

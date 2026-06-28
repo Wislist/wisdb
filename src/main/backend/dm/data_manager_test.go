@@ -16,7 +16,7 @@ import (
 func newTestDM(t *testing.T) (*dataManager, func()) {
 	t.Helper()
 	base := filepath.Join(t.TempDir(), "dm_test")
-	pc := pcacher.Create(base, pcacher.PAGE_SIZE*20)
+	pc, _ := pcacher.Create(base, pcacher.PAGE_SIZE*20)
 	lg := logger.CreateMock(base)
 	tmger := tm.CreateMock(base)
 	dm := NewDataManager(pc, lg, tmger)

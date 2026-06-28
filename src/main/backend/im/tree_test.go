@@ -26,7 +26,7 @@ func TestBPlusTreeConcurrentInsertAndSearch(t *testing.T) {
 	mem := int64(pcacher.PAGE_SIZE * 80)
 
 	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	dm0, _ := dm.Create(base, mem, tm0)
 	defer func() {
 		dm0.Close()
 		tm0.Close()
@@ -101,7 +101,7 @@ func TestBPlusTreeLifecycleStability(t *testing.T) {
 	mem := int64(pcacher.PAGE_SIZE * 120)
 
 	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	dm0, _ := dm.Create(base, mem, tm0)
 
 	bootUUID, err := Create(dm0)
 	if err != nil {
@@ -147,7 +147,7 @@ func TestBPlusTreeLifecycleStability(t *testing.T) {
 	tm0.Close()
 
 	tm1 := tm.Open(base)
-	dm1 := dm.Open(base, mem, tm1)
+	dm1, _ := dm.Open(base, mem, tm1)
 	defer func() {
 		dm1.Close()
 		tm1.Close()

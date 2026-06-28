@@ -19,7 +19,7 @@ type DataManager interface {
 	Read(uid utils.UUID) (Dataitem, bool, error)
 	Insert(xid tm.XID, data []byte) (utils.UUID, error)
 
-	Close()
+	Close() error
 }
 
 type dataManager struct {
@@ -65,78 +65,101 @@ func (dm *dataManager) releaseForCacher(h interface{}) {
 	di.pg.Release()
 }
 
-func Open(path string, mem int64, tm tm.TransactionManager) *dataManager {
-	pc := pcacher.Open(path, mem)
-	lg := logger.Open(path)
+func Open(path string, mem int64, tm tm.TransactionManager) (*dataManager, error) {
+	pc, err := pcacher.Open(path, mem)
+	if err != nil {
+		return nil, err
+	}
+	lg, err := logger.Open(path)
+	if err != nil {
+		return nil, err
+	}
 
 	dm := NewDataManager(pc, lg, tm)
-	if dm.loadAndCheckPage1() == false {
+	ok, err := dm.loadAndCheckPage1()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		Recovery(dm.tm, dm.lg, dm.pc)
 	}
 
-	dm.fillPindex()
+	if err := dm.fillPindex(); err != nil {
+		return nil, err
+	}
 
 	P1SetVCOpen(dm.page1)
 	dm.pc.FlushPage(dm.page1)
 
-	return dm
+	return dm, nil
 
 }
 
-func Create(path string, mem int64, tm tm.TransactionManager) *dataManager {
-	pc := pcacher.Create(path, mem)
-	lg := logger.Create(path)
+func Create(path string, mem int64, tm tm.TransactionManager) (*dataManager, error) {
+	pc, err := pcacher.Create(path, mem)
+	if err != nil {
+		return nil, err
+	}
+	lg, err := logger.Create(path)
+	if err != nil {
+		return nil, err
+	}
 
 	dm := NewDataManager(pc, lg, tm)
-	dm.initPage1()
+	if err := dm.initPage1(); err != nil {
+		return nil, err
+	}
 
-	return dm
+	return dm, nil
 }
 
 // fillPindex 构建pindex
-func (dm *dataManager) fillPindex() {
+func (dm *dataManager) fillPindex() error {
 	noPages := dm.pc.NoPages()
 	for i := 2; i <= noPages; i++ {
 		pg, err := dm.pc.GetPage(pcacher.Pgno(i))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		dm.pidx.Add(pg.Pgno(), PXFreeSpace(pg))
 		pg.Release()
 	}
+	return nil
 }
 
 // loadAndeCheckPage1 在openDB的时候读入page1，并检验其正确性
-func (dm *dataManager) loadAndCheckPage1() bool {
+func (dm *dataManager) loadAndCheckPage1() (bool, error) {
 	var err error
 	dm.page1, err = dm.pc.GetPage(1)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
-	return P1CheckVC(dm.page1)
+	return P1CheckVC(dm.page1), nil
 }
 
 // initPage1 在CreateDB的时候用于初始化page1
-func (dm *dataManager) initPage1() {
+func (dm *dataManager) initPage1() error {
 	pgno := dm.pc.NewPage(P1InitRaw())
 	utils.Assert(pgno == 1)
 	var err error
 	dm.page1, err = dm.pc.GetPage(pgno)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	dm.pc.FlushPage(dm.page1)
+	return dm.pc.FlushPage(dm.page1)
 }
 
-func (dm *dataManager) Close() {
+func (dm *dataManager) Close() error {
 	//TODO： 如果事物还在进行，直接Close会出错
 	if dm.page1 != nil {
 		P1SetVCClose(dm.page1)
 		dm.page1.Release()
 	}
-	dm.lg.Close()
-	dm.pc.Close()
+	if err := dm.lg.Close(); err != nil {
+		return err
+	}
+	return dm.pc.Close()
 }
 
 func (dm *dataManager) Insert(xid tm.XID, data []byte) (utils.UUID, error) {
@@ -188,7 +211,9 @@ func (dm *dataManager) Insert(xid tm.XID, data []byte) (utils.UUID, error) {
 		4、日志记录
 	*/
 	log := InsertLog(xid, pg, raw)
-	dm.lg.Log(log)
+	if err := dm.lg.Log(log); err != nil {
+		return 0, err
+	}
 
 	/*
 		5、将raw插入该页，并返回插入的位移
@@ -215,9 +240,9 @@ func (dm *dataManager) Read(uid utils.UUID) (Dataitem, bool, error) {
 	return di, true, nil
 }
 
-func (dm *dataManager) logDataitem(xid tm.XID, di *dataitem) {
+func (dm *dataManager) logDataitem(xid tm.XID, di *dataitem) error {
 	log := UpdateLog(xid, di)
-	dm.lg.Log(log)
+	return dm.lg.Log(log)
 }
 
 func (dm *dataManager) ReleaseDataitem(di *dataitem) {

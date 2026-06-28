@@ -34,12 +34,12 @@ type Pcacher interface {
 	 */
 	NewPage(initData []byte) Pgno
 	GetPage(pgno Pgno) (Page, error)
-	Close()
+	Close() error
 
 	/*recobery的时候才会被调用*/
-	TruncateByPgno(maxPgno Pgno) //将DB扩充为maxPgno这么多页的空间
+	TruncateByPgno(maxPgno Pgno) error //将DB扩充为maxPgno这么多页的空间
 	NoPages() int                //返回DB有多少页
-	FlushPage(pg Page)           //强制刷新pg到磁盘
+	FlushPage(pg Page) error     //强制刷新pg到磁盘，返回error
 
 }
 
@@ -52,29 +52,29 @@ type pcacher struct {
 	c cacher.Cacher
 }
 
-func Create(path string, mem int64) *pcacher {
+func Create(path string, mem int64) (*pcacher, error) {
 	file, err := os.OpenFile(path+SUFFIX_DB, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return newPcacher(file, mem)
 }
 
-func Open(path string, mem int64) *pcacher {
+func Open(path string, mem int64) (*pcacher, error) {
 	file, err := os.OpenFile(path+SUFFIX_DB, os.O_RDWR, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return newPcacher(file, mem)
 }
-func newPcacher(file *os.File, mem int64) *pcacher {
+func newPcacher(file *os.File, mem int64) (*pcacher, error) {
 	if mem/PAGE_SIZE < _MEM_LIM {
-		panic(ErrMemTooSmall)
+		return nil, ErrMemTooSmall
 	}
 
 	info, err := file.Stat()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	//计算文件的总页数
 	size := info.Size()
@@ -89,20 +89,22 @@ func newPcacher(file *os.File, mem int64) *pcacher {
 	p.file = file
 	p.noPages = uint32(size / PAGE_SIZE)
 
-	return p
+	return p, nil
 
 }
 
-func (p *pcacher) Close() {
+func (p *pcacher) Close() error {
 	p.c.Close()
-	p.file.Close()
+	return p.file.Close()
 }
 
 func (p *pcacher) NewPage(initData []byte) Pgno {
 	//对noPages增加1，且预留出一个页面的位置
 	pgno := Pgno(atomic.AddUint32(&p.noPages, 1))
 	pg := NewPage(pgno, initData, nil)
-	p.flush(pg)
+	if err := p.flush(pg); err != nil {
+		utils.Fatal(pgno, "NewPage flush:", err)
+	}
 	return pgno
 }
 
@@ -124,10 +126,10 @@ func (p *pcacher) getForCacher(uid utils.UUID) (interface{}, error) {
 	buf := make([]byte, PAGE_SIZE)
 	p.fileLock.Lock()
 	_, err := p.file.ReadAt(buf, offset)
-	if err != nil {
-		utils.Fatal(uid, "Read:", pgno, ",", offset, ",", err) //DB文件出现问题了，应该立刻停止
-	}
 	p.fileLock.Unlock()
+	if err != nil {
+		return nil, err
+	}
 
 	pg := NewPage(pgno, buf, p)
 	return pg, nil
@@ -138,7 +140,10 @@ func (p *pcacher) getForCacher(uid utils.UUID) (interface{}, error) {
 func (p *pcacher) releaseForCacher(underlying interface{}) {
 	pg := underlying.(*page)
 	if pg.dirty == true {
-		p.flush(pg)
+		if err := p.flush(pg); err != nil {
+			// best-effort logging during release
+			return
+		}
 		pg.dirty = false
 	}
 }
@@ -147,7 +152,7 @@ func (p *pcacher) release(pg *page) {
 	p.c.Release(Pgno2UUID(pg.pgno))
 }
 
-func (p *pcacher) flush(pg *page) {
+func (p *pcacher) flush(pg *page) error {
 	pgno := pg.pgno
 	offset := pageOffset(pgno)
 
@@ -155,30 +160,28 @@ func (p *pcacher) flush(pg *page) {
 	defer p.fileLock.Unlock()
 	_, err := p.file.WriteAt(pg.data, offset)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	err = p.file.Sync()
-	if err != nil {
-		panic(err)
-	}
+	return p.file.Sync()
 }
 
-func (p *pcacher) TruncateByPgno(maxPgno Pgno) {
+func (p *pcacher) TruncateByPgno(maxPgno Pgno) error {
 	size := pageOffset(maxPgno + 1)
 	err := p.file.Truncate(size)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	p.noPages = uint32(maxPgno)
+	return nil
 }
 
 func (p *pcacher) NoPages() int {
 	return int(p.noPages)
 }
 
-func (p *pcacher) FlushPage(pgi Page) {
+func (p *pcacher) FlushPage(pgi Page) error {
 	pg := pgi.(*page)
-	p.flush(pg)
+	return p.flush(pg)
 }
 
 func pageOffset(pgno Pgno) int64 {

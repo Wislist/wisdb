@@ -40,7 +40,7 @@ func TestTableManagerLifecycle(t *testing.T) {
 	createBooterFile(t, base)
 
 	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	dm0, _ := dm.Create(base, mem, tm0)
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := Create(base, sm0, dm0)
 
@@ -194,7 +194,7 @@ func TestTableManagerLifecycle(t *testing.T) {
 	tm0.Close()
 
 	tm1 := tm.Open(base)
-	dm1 := dm.Open(base, mem, tm1)
+	dm1, _ := dm.Open(base, mem, tm1)
 	sm1 := sm.NewSerializabilityManager(tm1, dm1)
 	tbm1 := Open(base, sm1, dm1)
 

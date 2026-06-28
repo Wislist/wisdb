@@ -36,7 +36,10 @@ var (
 
 func openDB(path string, cfg *config.Config, mem int64) {
 	tm0 := tm.Open(path)
-	dm0 := dm.Open(path, mem, tm0)
+	dm0, err := dm.Open(path, mem, tm0)
+	if err != nil {
+		utils.Fatal("Failed to open DM:", err)
+	}
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := tbm.Open(path, sm0, dm0)
 	sv := server.NewServer(netconfig.Net, netconfig.Address, tbm0)
@@ -52,8 +55,12 @@ func openDB(path string, cfg *config.Config, mem int64) {
 
 	sv.Start()
 
-	dm0.Close()
-	tm0.Close()
+	if err := dm0.Close(); err != nil {
+		utils.Info("DM close error:", err)
+	}
+	if err := tm0.Close(); err != nil {
+		utils.Info("TM close error:", err)
+	}
 	utils.Info("Database closed.")
 }
 
@@ -62,11 +69,18 @@ func createDB(path string, cfg *config.Config) {
 		panic(ErrDBExists)
 	}
 	tm := tm.Create(path)
-	dm := dm.Create(path, _DEFAULT_MEM, tm)
+	dm, err := dm.Create(path, _DEFAULT_MEM, tm)
+	if err != nil {
+		panic(err)
+	}
 	sm := sm.NewSerializabilityManager(tm, dm)
 	tbm.Create(path, sm, dm)
-	tm.Close()
-	dm.Close()
+	if err := tm.Close(); err != nil {
+		utils.Info("TM close error:", err)
+	}
+	if err := dm.Close(); err != nil {
+		utils.Info("DM close error:", err)
+	}
 }
 
 func dbExists(path string) bool {

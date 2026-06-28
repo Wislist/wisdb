@@ -3,7 +3,7 @@ package logger
 import "testing"
 
 func TestLogger(t *testing.T) {
-	lg := Create("test_logger")
+	lg, _ := Create("test_logger")
 	lg.Log([]byte("aaa"))
 	lg.Log([]byte("bbb"))
 	lg.Log([]byte("ccc"))
@@ -11,10 +11,10 @@ func TestLogger(t *testing.T) {
 	lg.Log([]byte("eee"))
 	lg.Close()
 
-	lg = Open("test_logger")
+	lg, _ = Open("test_logger")
 	lg.Rewind()
 
-	log, ok := lg.Next()
+	log, ok, _ := lg.Next()
 	if ok == false {
 		t.Fatal("error")
 	}
@@ -22,7 +22,7 @@ func TestLogger(t *testing.T) {
 		t.Fatal("error")
 	}
 
-	log, ok = lg.Next()
+	log, ok, _ = lg.Next()
 	if ok == false {
 		t.Fatal("error")
 	}
@@ -30,7 +30,7 @@ func TestLogger(t *testing.T) {
 		t.Fatal("error")
 	}
 
-	log, ok = lg.Next()
+	log, ok, _ = lg.Next()
 	if ok == false {
 		t.Fatal("error")
 	}
@@ -38,7 +38,7 @@ func TestLogger(t *testing.T) {
 		t.Fatal("error")
 	}
 
-	log, ok = lg.Next()
+	log, ok, _ = lg.Next()
 	if ok == false {
 		t.Fatal("error")
 	}
@@ -46,7 +46,7 @@ func TestLogger(t *testing.T) {
 		t.Fatal("error")
 	}
 
-	log, ok = lg.Next()
+	log, ok, _ = lg.Next()
 	if ok == false {
 		t.Fatal("error")
 	}
@@ -54,7 +54,7 @@ func TestLogger(t *testing.T) {
 		t.Fatal("error")
 	}
 
-	_, ok = lg.Next()
+	_, ok, _ = lg.Next()
 	if ok != false {
 		t.Fatal("error")
 	}
