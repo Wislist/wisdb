@@ -78,6 +78,7 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 		Next: next,
 	}
 
+	hasUserIndex := len(create.Index) > 0
 	for i := 0; i < len(create.FieldName); i++ {
 		fname := create.FieldName[i]
 		ftype := create.FieldType[i]
@@ -87,6 +88,11 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 				indexed = true
 				break
 			}
+		}
+		// If no user-specified indexes, auto-index the first field so that
+		// full table scans (WHERE on unindexed fields) have a B+Tree to walk.
+		if !hasUserIndex && i == 0 {
+			indexed = true
 		}
 		// 表结构元数据用 SUPER_XID 写入，避免 Undo 时破坏表结构
 		field, err := CreateField(tb, tm.SUPER_XID, fname, ftype, indexed)
@@ -355,7 +361,7 @@ func (t *table) fullScanFilter(xid tm.XID, where *statement.Where) ([]utils.UUID
 		}
 	}
 	if scanField == nil {
-		return nil, errors.New("cannot perform full scan: table has no indexed fields — add at least one index in CREATE TABLE")
+		return nil, errors.New("internal error: table has no indexed fields — this should not happen as the first field is always indexed")
 	}
 
 	allUUIDs, err := scanField.Search(0, utils.INF)

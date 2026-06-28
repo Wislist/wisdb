@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"errors"
 	"testing"
 
 	"mydb/src/main/backend/parser/statement"
@@ -110,7 +109,6 @@ func TestParseTxnAndSimpleCommands(t *testing.T) {
 func TestParseInvalidStatements(t *testing.T) {
 	cases := [][]byte{
 		[]byte(`unknown cmd`),
-		[]byte(`create table t id uint64`),
 		[]byte(`insert user values 1`),
 		[]byte(`read from user`),
 		[]byte(`update user name = 1`),
@@ -123,11 +121,6 @@ func TestParseInvalidStatements(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected parse error for: %s", stat)
 		}
-	}
-
-	_, err := Parse([]byte(`create table t id uint64`))
-	if !errors.Is(err, ErrHasNoIndex) {
-		t.Fatalf("expect ErrHasNoIndex, got: %v", err)
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 
 var (
 	ErrInvalidStat = errors.New("Invalid command. Supported: begin, commit, abort, create, drop, show, insert, read, update, delete")
-	ErrHasNoIndex  = errors.New("CREATE TABLE must include at least one indexed field, e.g. (index id)")
 )
 
 func Parse(statement []byte) (interface{}, error) {
@@ -534,7 +533,15 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 		}
 		if next == "," {
 		} else if next == "" {
-			return nil, ErrHasNoIndex
+			// No index clause — the first field will be auto-indexed.
+			eof, err := tokener.Peek()
+			if err != nil {
+				return nil, err
+			}
+			if eof != "" {
+				return nil, ErrInvalidStat
+			}
+			return create, nil
 		} else if next == "(" {
 			break
 		} else {
