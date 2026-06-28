@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-		"os"
+	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -42,7 +42,7 @@ func main() {
 
 var rootCmd = &cobra.Command{
 	Use:     "wisdb-server",
-	Short:   utils.CyanText("WisDB") + " \u2014 a lightweight KV-based relational database",
+	Short:   utils.CyanText("WisDB") + " — a lightweight KV-based relational database",
 	Version: version,
 	Long:    "WisDB is a lightweight KV-based relational database prototype written in Go.\nIt features MVCC transactions, WAL recovery, B+Tree indexing, and a TCP\nclient interface with SQL support.\n\nAll database files are stored inside a single directory.",
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
@@ -51,7 +51,7 @@ var rootCmd = &cobra.Command{
 
 var serveCmd = &cobra.Command{
 	Use:     "serve --db-path <path> [flags]",
-	Short:   "Start the database server",
+	Short:   utils.GreenText("Start the database server"),
 	Long:    "Start the WisDB server, listening for client connections.\n\nThe database directory must already exist and contain a valid WisDB\ndatabase (use 'create' to initialize one).",
 	Example: "  wisdb-server serve --db-path ./mydb\n  wisdb-server serve --db-path ./mydb --mem 128MB --addr :4000",
 	Args:    cobra.NoArgs,
@@ -60,7 +60,7 @@ var serveCmd = &cobra.Command{
 
 var createCmd = &cobra.Command{
 	Use:     "create --db-path <path>",
-	Short:   "Initialize a new database",
+	Short:   utils.GreenText("Initialize a new database"),
 	Long:    "Create a new WisDB database directory.\n\nThis creates the data, log, transaction, and metadata files inside\nthe specified directory. The directory will be created if it does\nnot already exist.",
 	Example: "  wisdb-server create --db-path ./mydb",
 	Args:    cobra.NoArgs,
@@ -97,17 +97,33 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid --mem value %q: %w", serveMem, err)
 	}
+
 	addrStr := serveNet + "://" + serveAddr
-	fmt.Println("")
-	fmt.Println("  " + utils.Color(utils.Blue, "███") + " " + utils.BoldText("WisDB") + "  " + utils.DimText("v"+version))
-	fmt.Println("  " + utils.DimText(addrStr) + "\n")
+
+	// ASCII art logo
+	logo := "" +
+		"  " + utils.Color(utils.Cyan, "╔══════════════════════════════╗") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "                                  " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ██╗ ██╗ █████╗ █████╗ █████╗    " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ ██╔══╝ ██╔══╝ ██╔══╝    " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ █████╗ █████╗ ██║       " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ██║ ╚══██║ ╚══██║ ██║       " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ██║ ╚██║ ████╔╝ ████╔╝ █████╗   " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "   ╚═╝  ╚═╝ ╚════╝ ╚════╝ ╚════╝    " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "      W    I    S    D    B         " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "║") + "                                  " + utils.Color(utils.Cyan, "║") + "\n" +
+		"  " + utils.Color(utils.Cyan, "╚══════════════════════════════╝")
+
+	fmt.Println("\n" + logo)
+	fmt.Println(utils.DimText("\n  " + addrStr + "\n"))
+
 	openDB(serveDBPath, mem, serveNet, serveAddr)
 	return nil
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
 	if dbExists(createDBPath) {
-		return fmt.Errorf("database already exists at %q \u2014 use 'serve' to open it", createDBPath)
+		return fmt.Errorf("database already exists at %q — use 'serve' to open it", createDBPath)
 	}
 	createDB(createDBPath)
 	fmt.Printf("\n  "+utils.GreenText("ok")+"  database created at %s\n\n", createDBPath)
@@ -202,6 +218,6 @@ func parseMem(memStr string) (int64, error) {
 	case "GB":
 		return int64(num) * _GB, nil
 	default:
-		return 0, fmt.Errorf("unknown unit %q \u2014 use KB, MB, or GB", unit)
+		return 0, fmt.Errorf("unknown unit %q — use KB, MB, or GB", unit)
 	}
 }
