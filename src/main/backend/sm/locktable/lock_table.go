@@ -44,20 +44,16 @@ func (lt *lockTable) Add(xid, uid utils.UUID) (bool, chan struct{}) {
 	defer lt.lock.Unlock()
 
 	if isInList(lt.x2u, xid, uid) == true {
-		ch := make(chan struct{})
-		go func() {
-			ch <- struct{}{}
-		}()
+		ch := make(chan struct{}, 1)
+		ch <- struct{}{}
 		return true, ch
 	}
 
 	if _, ok := lt.u2x[uid]; ok == false {
 		lt.u2x[uid] = xid
 		putIntoList(lt.x2u, xid, uid)
-		ch := make(chan struct{})
-		go func ()  {
-			ch <- struct{}{}
-		}()
+		ch := make(chan struct{}, 1)
+		ch <- struct{}{}
 		return true, ch
 	}
 
@@ -70,7 +66,7 @@ func (lt *lockTable) Add(xid, uid utils.UUID) (bool, chan struct{}) {
 		return false, nil
 	}
 	// 如果不会造成死锁，则等待回应
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 	lt.waitCh[xid] = ch
 	return true, ch
 }
