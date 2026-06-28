@@ -2,12 +2,13 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"mydb/src/main/backend/parser/statement"
 )
 
 var (
-	ErrInvalidStat = errors.New("Invalid command.")
-	ErrHasNoIndex  = errors.New("Table has no index.")
+	ErrInvalidStat = errors.New("Invalid command. Supported: begin, commit, abort, create, drop, show, insert, read, update, delete")
+	ErrHasNoIndex  = errors.New("CREATE TABLE must include at least one indexed field, e.g. (index id)")
 )
 
 func Parse(statement []byte) (interface{}, error) {
@@ -49,7 +50,7 @@ func Parse(statement []byte) (interface{}, error) {
 	next, err := tokener.Peek()
 	if err == nil && next != "" {
 		errStat := tokener.ErrStat()
-		staterr = errors.New("Invalid Stat: " + string(errStat))
+		staterr = fmt.Errorf("unexpected token after statement at: %s. Hint: check syntax — ORDER BY comes after WHERE, LIMIT after ORDER BY", string(errStat))
 	}
 
 	return stat, staterr

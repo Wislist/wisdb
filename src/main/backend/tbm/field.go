@@ -21,8 +21,8 @@ import (
 */
 
 var (
-	ErrInvalidFieldType  = errors.New("Invalid field type.")
-	ErrInvalidFieldValue = errors.New("Invalid field value")
+	ErrInvalidFieldType  = errors.New("unsupported field type — valid types: uint32, uint64, string")
+	ErrInvalidFieldValue = errors.New("field value does not match declared type — check value format")
 )
 
 type field struct {

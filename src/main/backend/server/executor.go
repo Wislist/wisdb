@@ -11,8 +11,8 @@ import (
 
 
 var (
-	ErrNoNestedTransaction = errors.New("No Nested Transaction.")
-	ErrNotInAnyTransaction = errors.New("Not in any transaction.")
+	ErrNoNestedTransaction = errors.New("cannot begin a transaction inside another transaction — commit or abort the current one first")
+	ErrNotInAnyTransaction = errors.New("no active transaction — use begin first before commit/abort")
 )
 
 type Executor interface {

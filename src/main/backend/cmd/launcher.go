@@ -29,8 +29,8 @@ const (
 )
 
 var (
-	ErrInvalidMem = errors.New("Invalid Memory Size.")
-	ErrDBExists   = errors.New("Database already exists, use -open.")
+	ErrInvalidMem = errors.New("invalid memory size — use format like 64MB, 128MB, 1GB")
+	ErrDBExists   = errors.New("database already exists at this path — use -open instead of -create")
 )
 
 func openDB(path string, mem int64) {

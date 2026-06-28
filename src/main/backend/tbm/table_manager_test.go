@@ -1,6 +1,7 @@
 package tbm
 
 import (
+	"errors"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -62,7 +63,7 @@ func TestTableManagerLifecycle(t *testing.T) {
 	}
 
 	_, err = tbm0.Create(xid, buildCreateUser())
-	if err != ErrDuplicatedTable {
+	if !errors.Is(err, ErrDuplicatedTable) {
 		t.Fatalf("duplicate create err=%v want=%v", err, ErrDuplicatedTable)
 	}
 

@@ -16,6 +16,7 @@ package tbm
 
 import (
 	"errors"
+	"fmt"
 	"mydb/src/main/backend/dm"
 	"mydb/src/main/backend/parser/statement"
 	"mydb/src/main/backend/sm"
@@ -27,8 +28,8 @@ import (
 )
 
 var (
-	ErrDuplicatedTable = errors.New("Duplicated table.")
-	ErrNoThatTable     = errors.New("No that table.")
+	ErrDuplicatedTable = errors.New("table already exists — use a different name or drop the existing table first")
+	ErrNoThatTable     = errors.New("table not found — check table name or use SHOW to list available tables")
 )
 
 type TableManager interface {
@@ -167,7 +168,7 @@ func (tbm *tableManager) Create(xid tm.XID, create *statement.Create) ([]byte, e
 
 	_, ok := tbm.tc[create.TableName]
 	if ok == true { // 已经存在
-		return nil, ErrDuplicatedTable
+		return nil, fmt.Errorf("table %s: %w", create.TableName, ErrDuplicatedTable)
 	}
 
 	// 直接创建新表

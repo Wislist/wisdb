@@ -12,10 +12,10 @@ import (
 
 
 var (
-	ErrInvalidValues   = errors.New("Invalid values.")
-	ErrInvalidLogOP    = errors.New("Invalid logic operation.")
-	ErrNoThatField     = errors.New("No that field.")
-	ErrFieldHasNoField = errors.New("Field has no index.")
+	ErrInvalidValues   = errors.New("value count does not match field count — check CREATE TABLE for expected fields")
+	ErrInvalidLogOP    = errors.New("unsupported logic operator — use AND or OR (max 2 conditions)")
+	ErrNoThatField     = errors.New("field not found in table — check field name in CREATE TABLE")
+	ErrFieldHasNoField = errors.New("field is not indexed — add it to the index list in CREATE TABLE, e.g. (index id age)")
 )
 
 
@@ -170,7 +170,7 @@ func (t *table) Update(xid tm.XID, update *statement.Update) (int, error) {
 		}
 	}
 	if fd == nil {
-		return 0, ErrNoThatField
+		return 0, fmt.Errorf("%s: %w", update.FieldName, ErrNoThatField)
 	}
 	v, err := fd.StrToValue(update.Value)
 	if err != nil {
@@ -355,7 +355,7 @@ func (t *table) fullScanFilter(xid tm.XID, where *statement.Where) ([]utils.UUID
 		}
 	}
 	if scanField == nil {
-		return nil, errors.New("no indexed field available for table scan")
+		return nil, errors.New("cannot perform full scan: table has no indexed fields — add at least one index in CREATE TABLE")
 	}
 
 	allUUIDs, err := scanField.Search(0, utils.INF)
@@ -529,7 +529,7 @@ func (t *table) Insert(xid tm.XID, insert *statement.Insert) error {
 
 func (t *table) strToEntry(values []string) (entry, error) {
 	if len(values) != len(t.fields) {
-		return nil, ErrInvalidValues
+		return nil, fmt.Errorf("got %d values, expected %d fields: %w", len(values), len(t.fields), ErrInvalidValues)
 	}
 
 	e := entry{}
