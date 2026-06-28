@@ -1,0 +1,5 @@
+{
+    "network": "tcp",
+    "address": ":3307",
+    "memory": "64MB"
+}

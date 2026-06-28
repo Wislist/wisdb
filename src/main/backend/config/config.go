@@ -3,14 +3,14 @@ package config
 import (
 	"os"
 
-	"gopkg.in/yaml.v3"
+	"encoding/json"
 )
 
 // Config holds all server configuration.
 type Config struct {
-	Network string `yaml:"network"`
-	Address string `yaml:"address"`
-	Memory  string `yaml:"memory"`
+	Network string `json:"network"`
+	Address string `json:"address"`
+	Memory  string `json:"memory"`
 }
 
 // Default returns the default configuration.
@@ -34,7 +34,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

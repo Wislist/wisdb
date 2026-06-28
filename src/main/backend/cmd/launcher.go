@@ -102,7 +102,7 @@ func main() {
 	open := flag.String("open", "", "-open DBPath")
 	create := flag.String("create", "", "-create DBPath")
 	memStr := flag.String("mem", "", "-mem 64MB")
-	configPath := flag.String("config", "wisdb.yaml", "-config config.yaml")
+	configPath := flag.String("config", "wisdb.json", "-config config.yaml")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)

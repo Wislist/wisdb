@@ -16,5 +16,8 @@ wisdb-client
 # Seed binary
 test/seed/seed
 
-# Data directory
-wisdb/
+
+wisdb/*.bt
+wisdb/*.db
+wisdb/*.log
+wisdb/*.xid
