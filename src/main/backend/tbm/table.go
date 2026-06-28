@@ -85,14 +85,16 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 				break
 			}
 		}
-		field, err := CreateField(tb,xid,fname,ftype,indexed)
+		// 表结构元数据用 SUPER_XID 写入，避免 Undo 时破坏表结构
+		field, err := CreateField(tb, tm.SUPER_XID, fname, ftype, indexed)
 		if err != nil {
 			return nil, err
 		}
 		tb.fields = append(tb.fields, field)
 	}
-	
-	err := tb.persistSelf(xid)
+
+	// 表元数据同样用 SUPER_XID 写入
+	err := tb.persistSelf(tm.SUPER_XID)
 	if err != nil {
 		return nil, err
 	}

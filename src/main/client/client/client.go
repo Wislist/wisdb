@@ -20,15 +20,21 @@ package client
 */
 
 
-import "mydb/src/main/transporter"
+import (
+	"mydb/src/main/transporter"
+)
 
 type Client interface {
 	Execute(stat []byte) ([]byte, error)
 	Close()
+	Reconnect(pkger transporter.Packager)
+	IsConnected() bool
+	Disconnected() <-chan struct{}
 }
 
 type client struct {
 	roundTripper RoundTripper
+	closed       bool
 }
 
 func NewClient(packager transporter.Packager) *client {
@@ -38,7 +44,31 @@ func NewClient(packager transporter.Packager) *client {
 }
 
 func (c *client) Close() {
-	c.roundTripper.Close()
+	if !c.closed {
+		c.roundTripper.Close()
+		c.closed = true
+	}
+}
+
+func (c *client) Reconnect(pkger transporter.Packager) {
+	c.roundTripper = NewRoundTripper(pkger)
+	c.closed = false
+}
+
+func (c *client) IsConnected() bool {
+	if c.closed {
+		return false
+	}
+	select {
+	case <-c.roundTripper.Disconnected():
+		return false
+	default:
+		return true
+	}
+}
+
+func (c *client) Disconnected() <-chan struct{} {
+	return c.roundTripper.Disconnected()
 }
 
 func (c *client) Execute(stat []byte) ([]byte, error) {

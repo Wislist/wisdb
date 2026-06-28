@@ -5,26 +5,50 @@ import (
 	"net"
 	"mydb/src/main/client/client"
 	"mydb/src/main/transporter"
-	"os"
+	"time"
 )
 
 const (
 	_NET     = "tcp"
-	_ADDRESS = ":8080"
+	_ADDRESS = ":3307"
 )
 
-func main() {
+func dial() transporter.Packager {
 	conn, err := net.Dial(_NET, _ADDRESS)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+		return nil
 	}
-
 	pro := transporter.NewWireProtocoler()
 	trs := transporter.NewWireTransporter(conn)
-	pkger := transporter.NewPackager(trs, pro)
+	return transporter.NewPackager(trs, pro)
+}
+
+func waitForDial() transporter.Packager {
+	for {
+		pkger := dial()
+		if pkger != nil {
+			return pkger
+		}
+		fmt.Printf("\rWaiting for server at %s...", _ADDRESS)
+		time.Sleep(time.Second)
+	}
+}
+
+func main() {
+	pkger := waitForDial()
+	fmt.Printf("\r\033[KConnected to %s\n", _ADDRESS)
 
 	clt := client.NewClient(pkger)
-	shell := client.NewShell(clt)
+
+	reconnect := func() (client.Client, <-chan struct{}) {
+		clt.Close()
+		pkger := waitForDial()
+		fmt.Printf("\r\033[KReconnected to %s\r\n", _ADDRESS)
+		clt.Reconnect(pkger)
+		return clt, clt.Disconnected()
+	}
+
+	shell := client.NewShellWithReconnect(clt, reconnect)
+	shell.SetDisconnCh(clt.Disconnected())
 	shell.Run()
 }

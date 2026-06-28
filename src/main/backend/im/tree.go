@@ -8,6 +8,7 @@
 package im
 
 import (
+	"fmt"
 	"mydb/src/main/backend/dm"
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
@@ -60,7 +61,9 @@ func Load(bootUUID utils.UUID, dm dm.DataManager) (BPlusTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	utils.Assert(ok == true)
+	if !ok {
+		return nil, fmt.Errorf("im: boot dataitem not found or invalid, uuid=%v", bootUUID)
+	}
 
 	return &bPlusTree{
 		bootUUID:     bootUUID,

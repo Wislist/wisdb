@@ -232,7 +232,7 @@ func (lg *logger) checkAndRemoveTail() error {
 
 	}
 
-	if true {
+	if xCheckSum == lg.xChecksum {
 		err := lg.file.Truncate(lg.pos)
 		if err != nil {
 			return err

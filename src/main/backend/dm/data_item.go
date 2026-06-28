@@ -57,6 +57,12 @@ func ParseDataitem(pg pcacher.Page, offset Offset, dm *dataManager) *dataitem {
 	raw := pg.Data()[offset:]
 	size := utils.GetUint16(raw[_OF_DATA_SIZE:])
 	length := _OF_DATA + int(size)
+
+	// 防止损坏数据导致越界：size 超出页剩余空间时截断
+	if length > len(raw) {
+		length = len(raw)
+	}
+
 	uid := Address2UUID(pg.Pgno(), Offset(offset))
 
 	di := &dataitem{

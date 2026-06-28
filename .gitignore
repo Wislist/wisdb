@@ -1,0 +1,17 @@
+# Compiled binary
+cmd
+wisdb-server
+wisdb-client
+
+# macOS
+.DS_Store
+
+# Go build cache
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# Seed binary
+test/seed/seed

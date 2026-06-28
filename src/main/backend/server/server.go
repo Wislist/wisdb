@@ -9,11 +9,13 @@ import (
 
 type Server interface {
 	Start()
+	Close()
 }
 
 type server struct {
-	network string
-	address string
+	network  string
+	address  string
+	listener net.Listener
 
 	tbm tbm.TableManager
 }
@@ -27,18 +29,24 @@ func NewServer(network, address string, tbm tbm.TableManager) *server {
 }
 
 func (s *server) Start() {
-	listener, err := net.Listen(s.network, s.address)
+	var err error
+	s.listener, err = net.Listen(s.network, s.address)
 	if err != nil {
 		panic(err)
 	}
 	utils.Info("Server Start at ", s.network, s.address)
 	for {
-		conn, err := listener.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
-			utils.Warn(err)
-			continue
+			return
 		}
 		go s.serve(conn)
+	}
+}
+
+func (s *server) Close() {
+	if s.listener != nil {
+		s.listener.Close()
 	}
 }
 

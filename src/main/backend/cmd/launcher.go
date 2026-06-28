@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"mydb/src/main/backend/dm"
 	"mydb/src/main/backend/dm/logger"
 	"mydb/src/main/backend/dm/pcacher"
@@ -13,18 +15,17 @@ import (
 	"mydb/src/main/backend/tbm"
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
+	"mydb/src/main/backend/netconfig"
 )
 
 const (
-	_NET         = "tcp"
-	_ADDRESS     = ":8080"
 	_DEFAULT_MEM = (1 << 20) * 64 // 64MB
 )
 
 const (
 	_KB = 1 << 10
-	_MB = 1 << 10
-	_GB = 1 << 10
+	_MB = 1 << 20
+	_GB = 1 << 30
 )
 
 var (
@@ -33,12 +34,26 @@ var (
 )
 
 func openDB(path string, mem int64) {
-	tm := tm.Open(path)
-	dm := dm.Open(path, mem, tm)
-	sm := sm.NewSerializabilityManager(tm, dm)
-	tbm := tbm.Open(path, sm, dm)
-	sv := server.NewServer(_NET, _ADDRESS, tbm)
+	tm0 := tm.Open(path)
+	dm0 := dm.Open(path, mem, tm0)
+	sm0 := sm.NewSerializabilityManager(tm0, dm0)
+	tbm0 := tbm.Open(path, sm0, dm0)
+	sv := server.NewServer(netconfig.Net, netconfig.Address, tbm0)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sig
+		utils.Info("Shutting down...")
+		sv.Close()
+	}()
+
 	sv.Start()
+
+	dm0.Close()
+	tm0.Close()
+	utils.Info("Database closed.")
 }
 
 func createDB(path string) {

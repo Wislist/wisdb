@@ -52,10 +52,12 @@ func TestCacher_ConcurrentSingleUID(t *testing.T) {
 			defer wg.Done()
 			obj, err := c.Get(uid)
 			if err != nil {
-				t.Fatalf("Get error: %v", err)
+				t.Errorf("Get error: %v", err)
+				return
 			}
 			if obj != first {
-				t.Fatalf("expected same instance for concurrent Get")
+				t.Errorf("expected same instance for concurrent Get")
+				return
 			}
 			c.Release(uid)
 		}()
@@ -77,7 +79,8 @@ func TestCacher_ReadWrite(t *testing.T) {
 
 	obj1, err := c.Get(uid)
 	if err != nil {
-		t.Fatalf("Get error: %v", err)
+		t.Errorf("Get error: %v", err)
+				return
 	}
 	r1 := obj1.(*resource)
 
@@ -92,7 +95,7 @@ func TestCacher_ReadWrite(t *testing.T) {
 		obj2, err := c.Get(uid)
 		if err != nil {
 			t.Errorf("Get error: %v", err)
-			return
+				return
 		}
 		r2 := obj2.(*resource)
 		r2.mu.Lock()
@@ -115,7 +118,8 @@ func TestCacher_DeleteAndRecreate(t *testing.T) {
 
 	obj1, err := c.Get(uid)
 	if err != nil {
-		t.Fatalf("Get error: %v", err)
+		t.Errorf("Get error: %v", err)
+				return
 	}
 
 	c.Release(uid)
@@ -126,7 +130,8 @@ func TestCacher_DeleteAndRecreate(t *testing.T) {
 
 	obj2, err := c.Get(uid)
 	if err != nil {
-		t.Fatalf("Get error: %v", err)
+		t.Errorf("Get error: %v", err)
+				return
 	}
 
 	if obj1 == obj2 {

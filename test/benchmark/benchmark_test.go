@@ -46,7 +46,7 @@ var benchLevels = []benchLevel{
 // result 保存单个梯度的测量结果
 type result struct {
 	workers     int
-	totalOps    int
+	totalQps    int
 	elapsedMs   int64
 	tps         float64
 	avgLatencyMs float64
@@ -163,7 +163,7 @@ func runLevel(t *testing.T, tbm0 tbm.TableManager, level benchLevel, idOffset in
 
 	return result{
 		workers:      level.workers,
-		totalOps:     int(done),
+		totalQps:     int(done),
 		elapsedMs:    elapsedMs,
 		tps:          tps,
 		avgLatencyMs: avgLatMs,
@@ -219,7 +219,7 @@ func TestBenchmarkConcurrency(t *testing.T) {
 		results = append(results, r)
 		w.Write([]string{
 			fmt.Sprintf("%d", r.workers),
-			fmt.Sprintf("%d", r.totalOps),
+			fmt.Sprintf("%d", r.totalQps),
 			fmt.Sprintf("%d", r.elapsedMs),
 			fmt.Sprintf("%.2f", r.tps),
 			fmt.Sprintf("%.3f", r.avgLatencyMs),
@@ -228,16 +228,16 @@ func TestBenchmarkConcurrency(t *testing.T) {
 		w.Flush()
 
 		t.Logf("  workers=%-3d  ops=%d  elapsed=%dms  TPS=%.1f  avgLat=%.3fms  errors=%d",
-			r.workers, r.totalOps, r.elapsedMs, r.tps, r.avgLatencyMs, r.errorCount)
+			r.workers, r.totalQps, r.elapsedMs, r.tps, r.avgLatencyMs, r.errorCount)
 	}
 
 	// 打印汇总表
 	t.Log("\n=== Benchmark Summary ===")
-	t.Log("Workers | TotalOps | Elapsed(ms) | TPS      | AvgLat(ms) | Errors")
+	t.Log("Workers | TotalQps | Elapsed(ms) | TPS      | AvgLat(ms) | Errors")
 	t.Log("--------|----------|-------------|----------|------------|-------")
 	for _, r := range results {
 		t.Logf("%-7d | %-8d | %-11d | %-8.1f | %-10.3f | %d",
-			r.workers, r.totalOps, r.elapsedMs, r.tps, r.avgLatencyMs, r.errorCount)
+			r.workers, r.totalQps, r.elapsedMs, r.tps, r.avgLatencyMs, r.errorCount)
 	}
 	t.Logf("\nCSV written to: %s", csvPath)
 }

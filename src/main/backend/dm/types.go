@@ -20,7 +20,7 @@ func Address2UUID(pgno pcacher.Pgno, offset Offset) utils.UUID {
 	return utils.UUID(u0 << 32 | u1)
 }
 
-const LEN_OFFSET = 4
+const LEN_OFFSET = 2
 
 func PutOffset(buf []byte, offset Offset) {
 	utils.PutUint16(buf, uint16(offset))
