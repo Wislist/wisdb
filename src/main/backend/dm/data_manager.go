@@ -151,7 +151,10 @@ func (dm *dataManager) initPage1() error {
 }
 
 func (dm *dataManager) Close() error {
-	//TODO： 如果事物还在进行，直接Close会出错
+	// Mark page1 as cleanly closed, so recovery is skipped on next open.
+	// The caller (launcher) must ensure all transactions are resolved before
+	// calling Close — the server drains active connections via WaitGroup,
+	// and each connection's executor aborts its active transaction on close.
 	if dm.page1 != nil {
 		P1SetVCClose(dm.page1)
 		dm.page1.Release()

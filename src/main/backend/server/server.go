@@ -5,6 +5,7 @@ import (
 	"mydb/src/main/backend/utils"
 	"mydb/src/main/transporter"
 	"net"
+	"sync"
 )
 
 type Server interface {
@@ -16,6 +17,7 @@ type server struct {
 	network  string
 	address  string
 	listener net.Listener
+	wg       sync.WaitGroup
 
 	tbm tbm.TableManager
 }
@@ -40,6 +42,7 @@ func (s *server) Start() {
 		if err != nil {
 			return
 		}
+		s.wg.Add(1)
 		go s.serve(conn)
 	}
 }
@@ -48,6 +51,8 @@ func (s *server) Close() {
 	if s.listener != nil {
 		s.listener.Close()
 	}
+	// Wait for all active connections to finish, ensuring no transactions remain
+	s.wg.Wait()
 }
 
 func (s *server) serve(conn net.Conn) {
@@ -56,6 +61,7 @@ func (s *server) serve(conn net.Conn) {
 	utils.Info("Establish Connection: ", conn.RemoteAddr())
 	defer func() {
 		utils.Info("Disconnect Connection: ", conn.RemoteAddr(), ", NetErr: ", netErr)
+		s.wg.Done()
 		conn.Close()
 	}()
 

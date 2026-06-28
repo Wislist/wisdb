@@ -53,6 +53,10 @@ func openDB(path string, mem int64, net, addr string) {
 
 	sv.Start()
 
+	// Ensure proper shutdown order:
+	// 1. Server.Close() was already called by the signal handler (or Start returned due to error)
+	// 2. sv.Close() drains all active connections via WaitGroup, ensuring no transactions remain
+	// 3. Only then is it safe to close DM and TM
 	if err := dm0.Close(); err != nil {
 		utils.Info("DM close error:", err)
 	}

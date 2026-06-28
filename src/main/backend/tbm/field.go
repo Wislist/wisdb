@@ -258,9 +258,9 @@ func (f *field) valueCompare(a, b interface{}) int {
 	return 0
 }
 
-/*
-	TODO: right为0和left为INF会有问题
-*/
+// CalExp calculates the UUID range [left, right] for a comparison expression.
+// Returns an empty range (left > right) when the expression can never match any value,
+// e.g. "age < 0" (unsigned values are never < 0) or "age > MAX" (overflow).
 func (f *field) CalExp(exp *statement.SingleExp) (left, right utils.UUID, err error) {
 	var v interface{}
 	if exp.CmpOp == "<" {
@@ -272,6 +272,11 @@ func (f *field) CalExp(exp *statement.SingleExp) (left, right utils.UUID, err er
 		right = f.ValueToUUID(v)
 		if right > 0 {
 			right--
+		} else {
+			// right == 0 means the value maps to UUID 0, but all UUIDs are >= 0,
+			// so "x < 0" can never match. Return an empty range.
+			left = 1
+			right = 0
 		}
 	} else if exp.CmpOp == "=" {
 		v, err = f.StrToValue(exp.Value)
@@ -287,13 +292,12 @@ func (f *field) CalExp(exp *statement.SingleExp) (left, right utils.UUID, err er
 			return
 		}
 		left = f.ValueToUUID(v) + 1
+		if left == 0 {
+			// Overflow: value was INF (max UUID), so "x > INF" can never match.
+			// Set left > right to signal an empty range.
+			left = 1
+			right = 0
+		}
 	}
 	return
 }
-
-
-
-
-
-
-

@@ -58,7 +58,7 @@ func Create(path string) (*transactionManager, error) {
 		return nil, err
 	}
 
-	return newTransactionManager(file), nil
+	return newTransactionManager(file)
 }
 
 func Open(path string) (*transactionManager, error) {
@@ -66,40 +66,44 @@ func Open(path string) (*transactionManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTransactionManager(file), nil
+	return newTransactionManager(file)
 }
 
-func newTransactionManager(file *os.File) *transactionManager {
+func newTransactionManager(file *os.File) (*transactionManager, error) {
 	tm := new(transactionManager)
 	tm.file = file
-	tm.checkXIDCounter()
-	return tm
+	if err := tm.checkXIDCounter(); err != nil {
+		return nil, err
+	}
+	return tm, nil
 }
 
 // 检查XID文件是否合法
-func (tm *transactionManager) checkXIDCounter() {
+func (tm *transactionManager) checkXIDCounter() error {
 	stat, err := tm.file.Stat()
 
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if stat.Size() < _XID_FILE_HEADER_SIZE {
-		panic(ErrBadXIDFile)
+		return ErrBadXIDFile
 	}
 
 	header := make([]byte, _XID_FILE_HEADER_SIZE)
 	_, err = tm.file.ReadAt(header, 0)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	tm.xidCounter = XID(utils.ParseUUID(header))
 
 	end, _ := xidPosition(XID(tm.xidCounter + 1))
 
 	if end != stat.Size() {
-		panic(ErrBadXIDFile)
+		return ErrBadXIDFile
 	}
+
+	return nil
 }
 
 func xidPosition(xid XID) (int64, int) {
