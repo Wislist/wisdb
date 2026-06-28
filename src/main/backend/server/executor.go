@@ -81,15 +81,22 @@ func (e *executor) execute2(stat interface{}) ([]byte, error) {
 	tmpTransaction := false
 	if e.xid  == 0 {
 		tmpTransaction = true
-		e.xid, _ = e.tbm.Begin(new(statement.Begin))
+		xid, _ := e.tbm.Begin(new(statement.Begin))
+		if xid == 0 {
+			return nil, errors.New("failed to begin implicit transaction: transaction manager returned invalid XID — the database may be in an inconsistent state")
+		}
+		e.xid = xid
 	}
 	defer func() {
 		if tmpTransaction {
 			if err != nil {
 				e.tbm.Abort(e.xid)
 			} else {
-				_, err = e.tbm.Commit(e.xid)
-				utils.Assert(err == nil)
+				_, commitErr := e.tbm.Commit(e.xid)
+				if commitErr != nil {
+					utils.Info("Implicit transaction commit error:", commitErr)
+					err = commitErr
+				}
 			}
 			e.xid = 0
 		}
