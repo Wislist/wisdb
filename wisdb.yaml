@@ -1,0 +1,11 @@
+# WisDB configuration file
+# All fields are optional — defaults are shown below.
+
+# Network protocol: tcp or unix
+network: tcp
+
+# Listen address
+address: ":3307"
+
+# Memory limit for the page cache (KB, MB, or GB)
+memory: "64MB"
