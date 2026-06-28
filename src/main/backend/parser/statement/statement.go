@@ -38,10 +38,21 @@ type Insert struct {
 	Values    []string
 }
 
+// Aggregate represents an aggregate function call.
+type Aggregate struct {
+	Func  string // "count", "sum", "avg"
+	Field string // field name or "*"
+}
+
 type Read struct {
-	TableName string
-	Fields    []string
-	Where     *Where
+	TableName  string
+	Fields     []string
+	Aggregates []Aggregate
+	Where      *Where
+	OrderBy    string
+	OrderDesc  bool
+	Limit      int
+	Offset     int
 }
 
 type Where struct {

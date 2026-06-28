@@ -2,6 +2,9 @@ package tbm
 
 import (
 	"errors"
+	"fmt"
+	"sort"
+	"strings"
 	"mydb/src/main/backend/parser/statement"
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
@@ -134,7 +137,7 @@ func (t *table) Print() string {
 }
 
 func (t *table) Delete(xid tm.XID, delete *statement.Delete) (int, error) {
-	uuids, err := t.parseWhere(delete.Where)
+	uuids, err := t.parseWhere(xid, delete.Where)
 	if err != nil {
 		return 0, err
 	}
@@ -154,7 +157,7 @@ func (t *table) Delete(xid tm.XID, delete *statement.Delete) (int, error) {
 }
 
 func (t *table) Update(xid tm.XID, update *statement.Update) (int, error) {
-	uuids, err := t.parseWhere(update.Where)
+	uuids, err := t.parseWhere(xid, update.Where)
 	if err != nil {
 		return 0, err
 	}
@@ -213,29 +216,49 @@ func (t *table) Update(xid tm.XID, update *statement.Update) (int, error) {
 }
 
 func (t *table) Read(xid tm.XID, read *statement.Read) (string, error) {
-	uuids, err := t.parseWhere(read.Where)
+	uuids, err := t.parseWhere(xid, read.Where)
 	if err != nil {
 		return "", err
 	}
 
-	result := ""
+	// Parse all entries
+	var entries []entry
 	for _, uuid := range uuids {
 		raw, ok, err := t.TBM.SM.Read(xid, uuid)
 		if err != nil {
 			return "", err
 		}
-		if ok == false {
+		if !ok {
 			continue
 		}
-		e := t.parseEntry(raw)
-		result += t.entryPrint(e) + "\n"
+		entries = append(entries, t.parseEntry(raw))
 	}
 
+	// ORDER BY
+	if read.OrderBy != "" {
+		t.sortEntries(entries, read.OrderBy, read.OrderDesc)
+	}
+
+	// LIMIT / OFFSET
+	if read.Limit > 0 {
+		entries = t.limitEntries(entries, read.Limit, read.Offset)
+	}
+
+	// Aggregates
+	if len(read.Aggregates) > 0 {
+		return t.computeAggregates(entries, read.Aggregates), nil
+	}
+
+	// Regular output
+	result := ""
+	for _, e := range entries {
+		result += t.entryPrint(e) + "\n"
+	}
 	return result, nil
 }
 
 // parseWhere 对where语句进行解析, 返回field, 该where对应区间内的uuid
-func (t *table) parseWhere(where *statement.Where) ([]utils.UUID, error) {
+func (t *table) parseWhere(xid tm.XID, where *statement.Where) ([]utils.UUID, error) {
 	var l0, r0, l1, r1 utils.UUID
 	single := false
 	var err error
@@ -253,15 +276,17 @@ func (t *table) parseWhere(where *statement.Where) ([]utils.UUID, error) {
 	} else if where != nil {
 		for _, f := range t.fields {
 			if f.FName == where.SingleExp1.Field {
-				if f.IsIndexed() == false {
-					return nil, ErrFieldHasNoField
-				}
 				fd = f
 				break
 			}
 		}
 		if fd == nil {
 			return nil, ErrNoThatField
+		}
+
+		// If the field is not indexed, fall back to full table scan with in-memory filter
+		if fd.IsIndexed() == false {
+			return t.fullScanFilter(xid, where)
 		}
 
 		l0, r0, l1, r1, single, err = t.calWhere(fd, where)
@@ -318,6 +343,166 @@ func (t *table) calWhere(fd *field, where *statement.Where) (l0, r0, l1, r1 util
 	}
 	return
 }
+// fullScanFilter performs a full table scan (via any indexed field) and filters rows in memory
+// against the WHERE condition. Used when the queried field has no index.
+func (t *table) fullScanFilter(xid tm.XID, where *statement.Where) ([]utils.UUID, error) {
+	// Find any indexed field to scan all rows
+	var scanField *field
+	for _, f := range t.fields {
+		if f.IsIndexed() {
+			scanField = f
+			break
+		}
+	}
+	if scanField == nil {
+		return nil, errors.New("no indexed field available for table scan")
+	}
+
+	allUUIDs, err := scanField.Search(0, utils.INF)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []utils.UUID
+	for _, uuid := range allUUIDs {
+		raw, ok, err := t.TBM.SM.Read(xid, uuid)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		entry := t.parseEntry(raw)
+		if t.evaluateWhere(entry, where) {
+			result = append(result, uuid)
+		}
+	}
+	return result, nil
+}
+
+// evaluateWhere checks if an entry satisfies a WHERE clause.
+func (t *table) evaluateWhere(entry entry, where *statement.Where) bool {
+	if where == nil {
+		return true
+	}
+	ok1 := t.matchSingleExp(entry, where.SingleExp1)
+	if where.LogicOp == "" {
+		return ok1
+	}
+	ok2 := t.matchSingleExp(entry, where.SingleExp2)
+	if where.LogicOp == "and" {
+		return ok1 && ok2
+	}
+	return ok1 || ok2
+}
+
+// matchSingleExp checks if an entry satisfies a single WHERE condition.
+func (t *table) matchSingleExp(entry entry, exp *statement.SingleExp) bool {
+	v, ok := entry[exp.Field]
+	if !ok {
+		return false
+	}
+	var fd *field
+	for _, f := range t.fields {
+		if f.FName == exp.Field {
+			fd = f
+			break
+		}
+	}
+	if fd == nil {
+		return false
+	}
+	target, err := fd.StrToValue(exp.Value)
+	if err != nil {
+		return false
+	}
+	cmp := fd.valueCompare(v, target)
+	switch exp.CmpOp {
+	case "=":
+		return cmp == 0
+	case "<":
+		return cmp < 0
+	case ">":
+		return cmp > 0
+	}
+	return false
+}
+
+// sortEntries sorts entries by a field.
+func (t *table) sortEntries(entries []entry, fieldName string, desc bool) {
+	var fd *field
+	for _, f := range t.fields {
+		if f.FName == fieldName {
+			fd = f
+			break
+		}
+	}
+	if fd == nil {
+		return
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		cmp := fd.valueCompare(entries[i][fieldName], entries[j][fieldName])
+		if desc {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+}
+
+// limitEntries applies LIMIT and OFFSET to a slice of entries.
+func (t *table) limitEntries(entries []entry, limit, offset int) []entry {
+	if offset >= len(entries) {
+		return nil
+	}
+	end := offset + limit
+	if end > len(entries) {
+		end = len(entries)
+	}
+	return entries[offset:end]
+}
+
+// computeAggregates computes aggregate functions over entries.
+func (t *table) computeAggregates(entries []entry, aggs []statement.Aggregate) string {
+	var parts []string
+	for _, agg := range aggs {
+		switch agg.Func {
+		case "count":
+			if agg.Field == "*" {
+				parts = append(parts, fmt.Sprintf("count(*)=%d", len(entries)))
+			}
+		case "sum":
+			var total uint64
+			for _, e := range entries {
+				v := e[agg.Field]
+				switch v := v.(type) {
+				case uint32:
+					total += uint64(v)
+				case uint64:
+					total += v
+				}
+			}
+			parts = append(parts, fmt.Sprintf("sum(%s)=%d", agg.Field, total))
+		case "avg":
+			var total uint64
+			for _, e := range entries {
+				v := e[agg.Field]
+				switch v := v.(type) {
+				case uint32:
+					total += uint64(v)
+				case uint64:
+					total += v
+				}
+			}
+			if len(entries) > 0 {
+				parts = append(parts, fmt.Sprintf("avg(%s)=%d", agg.Field, total/uint64(len(entries))))
+			} else {
+				parts = append(parts, fmt.Sprintf("avg(%s)=0", agg.Field))
+			}
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // Insert 对该表执行insert语句.
 func (t *table) Insert(xid tm.XID, insert *statement.Insert) error {
 	e, err := t.strToEntry(insert.Values) // 将insert的values转换为entry

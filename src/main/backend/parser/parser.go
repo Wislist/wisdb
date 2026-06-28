@@ -1,15 +1,9 @@
-/*
-	parser.go 实现了对语句的解析
-	语法见syntax.txt
-*/
-
 package parser
 
 import (
 	"errors"
 	"mydb/src/main/backend/parser/statement"
 )
-
 
 var (
 	ErrInvalidStat = errors.New("Invalid command.")
@@ -116,12 +110,12 @@ func parseUpdate(tokener *tokener) (*statement.Update, error) {
 	if err != nil {
 		return nil, err
 	}
-	if tmp == "" { // no where statement
+	if tmp == "" {
 		update.Where = nil
 		return update, nil
 	}
 
-	where, err := parseWhere(tokener) // parse where statement
+	where, err := parseWhere(tokener)
 	if err != nil {
 		return nil, err
 	}
@@ -189,13 +183,13 @@ func parseInsert(tokener *tokener) (*statement.Insert, error) {
 		return nil, ErrInvalidStat
 	}
 
-	for { // get value list
+	for {
 		tokener.Pop()
 		value, err := tokener.Peek()
 		if err != nil {
 			return nil, err
 		}
-		if value == "" { // eof
+		if value == "" {
 			break
 		} else {
 			insert.Values = append(insert.Values, value)
@@ -216,23 +210,56 @@ func parseRead(tokener *tokener) (*statement.Read, error) {
 		read.Fields = append(read.Fields, "*")
 		tokener.Pop()
 	} else {
-		for { // parse field to be read
+		for {
 			field, err := tokener.Peek()
 			if err != nil {
 				return nil, err
 			}
-			if isName(field) == false {
+
+			if isAggFunc(field) {
+				agg := statement.Aggregate{Func: field}
+				tokener.Pop()
+
+				lparen, err := tokener.Peek()
+				if err != nil || lparen != "(" {
+					return nil, ErrInvalidStat
+				}
+				tokener.Pop()
+
+				arg, err := tokener.Peek()
+				if err != nil {
+					return nil, err
+				}
+				if arg == "*" && field == "count" {
+					agg.Field = "*"
+					tokener.Pop()
+				} else if isName(arg) {
+					agg.Field = arg
+					tokener.Pop()
+				} else {
+					return nil, ErrInvalidStat
+				}
+
+				rparen, err := tokener.Peek()
+				if err != nil || rparen != ")" {
+					return nil, ErrInvalidStat
+				}
+				tokener.Pop()
+
+				read.Aggregates = append(read.Aggregates, agg)
+			} else if isName(field) {
+				read.Fields = append(read.Fields, field)
+				tokener.Pop()
+			} else {
 				return nil, ErrInvalidStat
 			}
-			read.Fields = append(read.Fields, field)
 
-			tokener.Pop()
 			comma, err := tokener.Peek()
 			if err != nil {
 				return nil, err
 			}
-			if comma == "," { // has more fields
-				tokener.Pop() // pop ","
+			if comma == "," {
+				tokener.Pop()
 			} else {
 				break
 			}
@@ -246,9 +273,9 @@ func parseRead(tokener *tokener) (*statement.Read, error) {
 	if from != "from" {
 		return nil, ErrInvalidStat
 	}
+	tokener.Pop()
 
-	tokener.Pop()                    // pop from
-	tableName, err := tokener.Peek() // get table name
+	tableName, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
@@ -256,36 +283,103 @@ func parseRead(tokener *tokener) (*statement.Read, error) {
 		return nil, ErrInvalidStat
 	}
 	read.TableName = tableName
+	tokener.Pop()
 
-	tokener.Pop() // pop table name
 	tmp, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
-	if tmp == "" { // no where statement
-		read.Where = nil
+	if tmp == "" {
 		return read, nil
 	}
 
-	where, err := parseWhere(tokener) // parse where statement
+	if tmp == "where" {
+		where, err := parseWhere(tokener)
+		if err != nil {
+			return nil, err
+		}
+		read.Where = where
+	}
+
+	// ORDER BY
+	tmp, err = tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
-	read.Where = where
+	if tmp == "order" {
+		tokener.Pop()
+		by, err := tokener.Peek()
+		if err != nil || by != "by" {
+			return nil, ErrInvalidStat
+		}
+		tokener.Pop()
+
+		field, err := tokener.Peek()
+		if err != nil || isName(field) == false {
+			return nil, ErrInvalidStat
+		}
+		read.OrderBy = field
+		tokener.Pop()
+
+		dir, err := tokener.Peek()
+		if err == nil && dir != "" {
+			if dir == "desc" {
+				read.OrderDesc = true
+				tokener.Pop()
+			} else if dir == "asc" {
+				tokener.Pop()
+			}
+		}
+	}
+
+	// LIMIT
+	tmp, err = tokener.Peek()
+	if err != nil {
+		return nil, err
+	}
+	if tmp == "limit" {
+		tokener.Pop()
+		limitStr, err := tokener.Peek()
+		if err != nil {
+			return nil, err
+		}
+		limitVal, err := utilsStrToInt(limitStr)
+		if err != nil {
+			return nil, ErrInvalidStat
+		}
+		read.Limit = limitVal
+		tokener.Pop()
+
+		off, err := tokener.Peek()
+		if err == nil && off == "offset" {
+			tokener.Pop()
+			offsetStr, err := tokener.Peek()
+			if err != nil {
+				return nil, err
+			}
+			offsetVal, err := utilsStrToInt(offsetStr)
+			if err != nil {
+				return nil, ErrInvalidStat
+			}
+			read.Offset = offsetVal
+			tokener.Pop()
+		}
+	}
+
 	return read, nil
 }
 
 func parseWhere(tokener *tokener) (*statement.Where, error) {
 	where := new(statement.Where)
 
-	whereStr, err := tokener.Peek()
+	where0, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
-	if whereStr != "where" {
+	if where0 != "where" {
 		return nil, ErrInvalidStat
 	}
-	tokener.Pop() // pop where
+	tokener.Pop()
 
 	sexp1, err := parseSingleExpr(tokener)
 	if err != nil {
@@ -297,15 +391,12 @@ func parseWhere(tokener *tokener) (*statement.Where, error) {
 	if err != nil {
 		return nil, err
 	}
-	if logicOp == "" { // eof, only one compare statement
+	if logicOp == "" || isLogicOp(logicOp) == false {
 		where.LogicOp = ""
 		return where, nil
 	}
-	if isLogicOp(logicOp) == false {
-		return nil, ErrInvalidStat
-	}
 	where.LogicOp = logicOp
-	tokener.Pop() // pop logicop
+	tokener.Pop()
 
 	sexp2, err := parseSingleExpr(tokener)
 	if err != nil {
@@ -326,7 +417,6 @@ func parseWhere(tokener *tokener) (*statement.Where, error) {
 
 func parseSingleExpr(tokener *tokener) (*statement.SingleExp, error) {
 	singleExp := new(statement.SingleExp)
-
 	field, err := tokener.Peek()
 	if err != nil {
 		return nil, err
@@ -358,7 +448,7 @@ func parseSingleExpr(tokener *tokener) (*statement.SingleExp, error) {
 }
 
 func parseDrop(tokener *tokener) (*statement.Drop, error) {
-	table, err := tokener.Peek() // get table
+	table, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +457,7 @@ func parseDrop(tokener *tokener) (*statement.Drop, error) {
 	}
 
 	tokener.Pop()
-	tableName, err := tokener.Peek() // get table name
+	tableName, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +480,7 @@ func parseDrop(tokener *tokener) (*statement.Drop, error) {
 }
 
 func parseCreate(tokener *tokener) (*statement.Create, error) {
-	table, err := tokener.Peek() // get table
+	table, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
@@ -399,8 +489,8 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 	}
 
 	create := new(statement.Create)
-	tokener.Pop()               // pop table
-	name, err := tokener.Peek() // get table name
+	tokener.Pop()
+	name, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
@@ -409,23 +499,23 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 	}
 	create.TableName = name
 
-	for { // get field and type
+	for {
 		tokener.Pop()
-		field, err := tokener.Peek() // get field
+		field, err := tokener.Peek()
 
 		if err != nil {
 			return nil, err
 		}
 
-		if field == "(" { // has index
+		if field == "(" {
 			break
 		}
 		if isName(field) == false {
 			return nil, ErrInvalidStat
 		}
 
-		tokener.Pop()                // pop field
-		ftype, err := tokener.Peek() // get field type
+		tokener.Pop()
+		ftype, err := tokener.Peek()
 		if err != nil {
 			return nil, err
 		}
@@ -436,31 +526,30 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 		create.FieldName = append(create.FieldName, field)
 		create.FieldType = append(create.FieldType, ftype)
 
-		tokener.Pop() // pop field type
+		tokener.Pop()
 		next, err := tokener.Peek()
 		if err != nil {
 			return nil, err
 		}
-		if next == "," { // has next field
-		} else if next == "" { // is eof, return now
+		if next == "," {
+		} else if next == "" {
 			return nil, ErrHasNoIndex
-		} else if next == "(" { // has index
+		} else if next == "(" {
 			break
-		} else { // error statement
+		} else {
 			return nil, ErrInvalidStat
 		}
 	}
 
-	// get index
-	tokener.Pop()                // pop '('
-	index, err := tokener.Peek() // get index
+	tokener.Pop()
+	index, err := tokener.Peek()
 	if err != nil {
 		return nil, err
 	}
 	if index != "index" {
 		return nil, ErrInvalidStat
 	}
-	for { // get all fields to be indexed
+	for {
 		tokener.Pop()
 		field, err := tokener.Peek()
 		if err != nil {
@@ -474,7 +563,7 @@ func parseCreate(tokener *tokener) (*statement.Create, error) {
 			create.Index = append(create.Index, field)
 		}
 	}
-	tokener.Pop() // pop ')'
+	tokener.Pop()
 	eof, err := tokener.Peek()
 	if err != nil {
 		return nil, err
@@ -489,9 +578,12 @@ func isLogicOp(op string) bool {
 	return op == "and" || op == "or"
 }
 
+func isAggFunc(name string) bool {
+	return name == "count" || name == "sum" || name == "avg"
+}
+
 func isType(tp string) bool {
-	return tp == "uint32" || tp == "uint64" ||
-		 tp == "string"
+	return tp == "uint32" || tp == "uint64" || tp == "string"
 }
 
 func isName(name string) bool {
@@ -597,4 +689,16 @@ func parseAbort(tokener *tokener) (*statement.Abort, error) {
 	} else {
 		return nil, ErrInvalidStat
 	}
+}
+
+
+func utilsStrToInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, ErrInvalidStat
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

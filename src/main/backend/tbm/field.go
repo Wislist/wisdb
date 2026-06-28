@@ -223,6 +223,41 @@ func (f *field) ValuePrint(v interface{}) string {
 	return str
 }
 
+
+// valueCompare compares two field values and returns -1, 0, or 1.
+func (f *field) valueCompare(a, b interface{}) int {
+	switch f.FType {
+	case "uint32":
+		va, vb := a.(uint32), b.(uint32)
+		if va < vb {
+			return -1
+		}
+		if va > vb {
+			return 1
+		}
+		return 0
+	case "uint64":
+		va, vb := a.(uint64), b.(uint64)
+		if va < vb {
+			return -1
+		}
+		if va > vb {
+			return 1
+		}
+		return 0
+	case "string":
+		va, vb := a.(string), b.(string)
+		if va < vb {
+			return -1
+		}
+		if va > vb {
+			return 1
+		}
+		return 0
+	}
+	return 0
+}
+
 /*
 	TODO: right为0和left为INF会有问题
 */
