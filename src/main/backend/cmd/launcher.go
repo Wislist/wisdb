@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"flag"
-	"mydb/src/main/backend/config"
 	"fmt"
 	"os"
 	"os/signal"
@@ -16,7 +15,6 @@ import (
 	"mydb/src/main/backend/tbm"
 	"mydb/src/main/backend/tm"
 	"mydb/src/main/backend/utils"
-	"mydb/src/main/backend/netconfig"
 )
 
 const (
@@ -34,7 +32,7 @@ var (
 	ErrDBExists   = errors.New("database already exists at this path — use -open instead of -create")
 )
 
-func openDB(path string, cfg *config.Config, mem int64) {
+func openDB(path string, mem int64, net, addr string) {
 	tm0, _ := tm.Open(path)
 	dm0, err := dm.Open(path, mem, tm0)
 	if err != nil {
@@ -42,7 +40,7 @@ func openDB(path string, cfg *config.Config, mem int64) {
 	}
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := tbm.Open(path, sm0, dm0)
-	sv := server.NewServer(netconfig.Net, netconfig.Address, tbm0)
+	sv := server.NewServer(net, addr, tbm0)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -64,7 +62,7 @@ func openDB(path string, cfg *config.Config, mem int64) {
 	utils.Info("Database closed.")
 }
 
-func createDB(path string, cfg *config.Config) {
+func createDB(path string) {
 	if dbExists(path) {
 		panic(ErrDBExists)
 	}
@@ -101,29 +99,20 @@ func dbExists(path string) bool {
 func main() {
 	open := flag.String("open", "", "-open DBPath")
 	create := flag.String("create", "", "-create DBPath")
-	memStr := flag.String("mem", "", "-mem 64MB")
-	configPath := flag.String("config", "wisdb.json", "-config config.yaml")
+	memStr := flag.String("mem", "64MB", "-mem 64MB")
+	net := flag.String("net", "tcp", "-net tcp")
+	addr := flag.String("addr", ":3307", "-addr :3307")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if *memStr != "" {
-		cfg.Memory = *memStr
-	}
-
 	if *open != "" {
-		openDB(*open, cfg, parseMem(cfg.Memory))
+		openDB(*open, parseMem(*memStr), *net, *addr)
 		return
 	}
 	if *create != "" {
-		createDB(*create, cfg)
+		createDB(*create)
 		return
 	}
-	fmt.Println("Usage: launcher -open DBPath [-config config.yaml] [-mem 64MB]")
+	fmt.Println("Usage: launcher -open DBPath [-mem 64MB] [-net tcp] [-addr :3307]")
 	fmt.Println("       launcher -create DBPath")
 }
 
