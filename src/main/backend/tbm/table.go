@@ -297,14 +297,11 @@ func (t *table) parseWhere(xid tm.XID, where *statement.Where) ([]utils.UUID, er
 	var fd *field
 
 	if where == nil {
-		for _, f := range t.fields {
-			if f.IsIndexed() {
-				fd = f
-				break
-			}
-		}
+		// Full table scan without WHERE — use the hidden row index
+		// (like InnoDB clustered index) to enumerate all rows.
 		l0, r0 = 0, utils.INF
 		single = true
+		uuids, err := t.rowIndexBt.SearchRange(l0, r0); return uuids, err
 	} else if where != nil {
 		for _, f := range t.fields {
 			if f.FName == where.SingleExp1.Field {
