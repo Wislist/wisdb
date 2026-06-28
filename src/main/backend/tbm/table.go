@@ -55,7 +55,18 @@ func LoadTable(tbm *tableManager, uuid utils.UUID) *table {
 
 	tb.parseSelf(raw)
 
-	// Load the hidden row index B+Tree
+	// Load or create the hidden row index B+Tree.
+	// Databases created before v0.2 don't have a rowIndex — create one lazily.
+	if tb.rowIndex == utils.NilUUID {
+		tb.rowIndex, err = im.Create(tb.TBM.DM)
+		if err != nil {
+			panic(err)
+		}
+		// Persist the new rowIndex so next load finds it
+		if err := tb.persistSelf(tm.SUPER_XID); err != nil {
+			panic(err)
+		}
+	}
 	tb.rowIndexBt, err = im.Load(tb.rowIndex, tb.TBM.DM)
 	if err != nil {
 		panic(err)
@@ -69,14 +80,26 @@ func (t *table) parseSelf(raw []byte) {
 	var pos, shift int
 	t.Name, shift = utils.ParseVarStr(raw[pos:])
 	pos += shift
+	t.status = raw[pos]
+	pos++
 	t.Next = utils.ParseUUID(raw[pos:])
 	pos += utils.LEN_UUID
 
-	for pos < len(raw) {
+	// 读取 fields
+	fieldCount := int(raw[pos])
+	pos++
+	for i := 0; i < fieldCount; i++ {
 		uuid := utils.ParseUUID(raw[pos:])
 		pos += utils.LEN_UUID
 		f := LoadField(t, uuid)
 		t.fields = append(t.fields, f)
+	}
+
+	// 读取 hidden row index UUID (v0.2+ format).
+	// Old databases don't have this field; in that case the row index
+	// B+Tree will be created lazily on first load.
+	if pos+utils.LEN_UUID <= len(raw) {
+		t.rowIndex = utils.ParseUUID(raw[pos:])
 	}
 }
 
