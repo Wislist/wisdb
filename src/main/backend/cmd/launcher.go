@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"mydb/src/main/backend/dm"
@@ -75,6 +76,8 @@ Serve flags:
   --addr     ADDR   Listen address (default: ":3307").
   --net      NET    Network type: tcp, unix (default: "tcp").
 
+All database files are stored inside <db-path>/ — the path is a directory.
+
 Examples:
   wisdb-server create --db-path ./mydb
   wisdb-server serve  --db-path ./mydb
@@ -112,7 +115,7 @@ func serveCmd() {
 
 func createCmd() {
 	flags := flag.NewFlagSet("create", flag.ExitOnError)
-	dbPath := flags.String("db-path", "", "Path for new database")
+	dbPath := flags.String("db-path", "", "Path for new database directory")
 
 	flags.Usage = func() {
 		fmt.Print("Usage: wisdb-server create --db-path <path>\n\nFlags:\n")
@@ -132,17 +135,25 @@ func createCmd() {
 	}
 
 	createDB(*dbPath)
-	fmt.Printf("Database created at %q.\n", *dbPath)
+}
+
+// dbPrefix returns the path prefix used by all storage modules inside the
+// database directory. Files live under <path>/wisdb.* so only files owned
+// by WisDB appear inside the user-specified directory.
+func dbPrefix(path string) string {
+	return filepath.Join(path, "wisdb")
 }
 
 func openDB(path string, mem int64, network, addr string) {
-	tm0, _ := tm.Open(path)
-	dm0, err := dm.Open(path, mem, tm0)
+	prefix := dbPrefix(path)
+
+	tm0, _ := tm.Open(prefix)
+	dm0, err := dm.Open(prefix, mem, tm0)
 	if err != nil {
 		utils.Fatal("Failed to open DM:", err)
 	}
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
-	tbm0 := tbm.Open(path, sm0, dm0)
+	tbm0 := tbm.Open(prefix, sm0, dm0)
 	sv := server.NewServer(network, addr, tbm0)
 
 	sig := make(chan os.Signal, 1)
@@ -156,10 +167,6 @@ func openDB(path string, mem int64, network, addr string) {
 
 	sv.Start()
 
-	// Ensure proper shutdown order:
-	// 1. Server.Close() was already called by the signal handler (or Start returned due to error)
-	// 2. sv.Close() drains all active connections via WaitGroup, ensuring no transactions remain
-	// 3. Only then is it safe to close DM and TM
 	if err := dm0.Close(); err != nil {
 		utils.Info("DM close error:", err)
 	}
@@ -170,13 +177,19 @@ func openDB(path string, mem int64, network, addr string) {
 }
 
 func createDB(path string) {
-	tm, _ := tm.Create(path)
-	dm, err := dm.Create(path, defaultMem, tm)
+	if err := os.MkdirAll(path, 0755); err != nil {
+		utils.Fatal("Failed to create database directory:", err)
+	}
+
+	prefix := dbPrefix(path)
+
+	tm, _ := tm.Create(prefix)
+	dm, err := dm.Create(prefix, defaultMem, tm)
 	if err != nil {
 		utils.Fatal("Failed to create DM:", err)
 	}
 	sm := sm.NewSerializabilityManager(tm, dm)
-	tbm.Create(path, sm, dm)
+	tbm.Create(prefix, sm, dm)
 	if err := tm.Close(); err != nil {
 		utils.Info("TM close error:", err)
 	}
@@ -186,11 +199,12 @@ func createDB(path string) {
 }
 
 func dbExists(path string) bool {
+	prefix := dbPrefix(path)
 	paths := []string{
-		path + pcacher.SUFFIX_DB,
-		path + logger.SUFFIX_LOG,
-		path + tm.XID_SUFFIX,
-		path + ".bt",
+		prefix + pcacher.SUFFIX_DB,
+		prefix + logger.SUFFIX_LOG,
+		prefix + tm.XID_SUFFIX,
+		prefix + ".bt",
 	}
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
