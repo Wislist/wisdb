@@ -11,7 +11,11 @@ import (
 
 	"mydb/src/main/transporter"
 	"mydb/src/main/client/client"
-	"mydb/src/main/backend/netconfig"
+)
+
+const (
+	Net     = "tcp"
+	Address = ":3307"
 )
 
 
@@ -29,7 +33,7 @@ func main() {
 	}
 	defer f.Close()
 
-	conn, err := net.DialTimeout(netconfig.Net, netconfig.Address, 5*time.Second)
+	conn, err := net.DialTimeout(Net, Address, 5*time.Second)
 	if err != nil {
 		fmt.Printf("连接数据库失败: %v\n确认服务端已启动（go run ./src/main/backend/cmd -open <dbpath>）\n", err)
 		os.Exit(1)
