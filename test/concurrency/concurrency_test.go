@@ -70,8 +70,8 @@ func TestBackendClientConcurrent50To100(t *testing.T) {
 	mem := int64(pcacher.PAGE_SIZE * 200)
 	createBooterFile(t, base)
 
-	tm0 := tm.Create(base)
-	dm0 := dm.Create(base, mem, tm0)
+	tm0,_ := tm.Create(base)
+	dm0,_ := dm.Create(base, mem, tm0)
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := tbm.Create(base, sm0, dm0)
 	defer func() {
