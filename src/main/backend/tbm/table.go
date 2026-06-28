@@ -464,10 +464,16 @@ func (t *table) matchSingleExp(entry entry, exp *statement.SingleExp) bool {
 	switch exp.CmpOp {
 	case "=":
 		return cmp == 0
+	case "!=":
+		return cmp != 0
 	case "<":
 		return cmp < 0
+	case "<=":
+		return cmp <= 0
 	case ">":
 		return cmp > 0
+	case ">=":
+		return cmp >= 0
 	}
 	return false
 }
@@ -542,6 +548,38 @@ func (t *table) computeAggregates(entries []entry, aggs []statement.Aggregate) s
 			} else {
 				parts = append(parts, fmt.Sprintf("avg(%s)=0", agg.Field))
 			}
+		case "min":
+			if len(entries) == 0 {
+				parts = append(parts, fmt.Sprintf("min(%s)=0", agg.Field))
+				break
+			}
+			var minVal uint64 = ^uint64(0)
+			for _, e := range entries {
+				v := e[agg.Field]
+				switch v := v.(type) {
+				case uint32:
+					if uint64(v) < minVal { minVal = uint64(v) }
+				case uint64:
+					if v < minVal { minVal = v }
+				}
+			}
+			parts = append(parts, fmt.Sprintf("min(%s)=%d", agg.Field, minVal))
+		case "max":
+			if len(entries) == 0 {
+				parts = append(parts, fmt.Sprintf("max(%s)=0", agg.Field))
+				break
+			}
+			var maxVal uint64
+			for _, e := range entries {
+				v := e[agg.Field]
+				switch v := v.(type) {
+				case uint32:
+					if uint64(v) > maxVal { maxVal = uint64(v) }
+				case uint64:
+					if v > maxVal { maxVal = v }
+				}
+			}
+			parts = append(parts, fmt.Sprintf("max(%s)=%d", agg.Field, maxVal))
 		}
 	}
 	return strings.Join(parts, " ")

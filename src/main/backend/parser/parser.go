@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrInvalidStat = errors.New("Invalid command. Supported: begin, commit, abort, create, drop, show, insert, read, update, delete")
+	ErrInvalidStat = errors.New("Invalid command. Supported: begin, commit, abort, create, drop, show, insert, read/select, update, delete")
 )
 
 func Parse(statement []byte) (interface{}, error) {
@@ -32,7 +32,7 @@ func Parse(statement []byte) (interface{}, error) {
 		stat, staterr = parseCreate(tokener)
 	case "drop":
 		stat, staterr = parseDrop(tokener)
-	case "read":
+	case "read", "select":
 		stat, staterr = parseRead(tokener)
 	case "insert":
 		stat, staterr = parseInsert(tokener)
@@ -496,11 +496,23 @@ func parseSingleExpr(tokener *tokener) (*statement.SingleExp, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Handle multi-char operators: <= and >=
+	tokener.Pop()
+	// Handle multi-char operators: <= >= !=
+	if op == "<" || op == ">" || op == "!" {
+		next, err := tokener.Peek()
+		if err != nil {
+			return nil, err
+		}
+		if next == "=" {
+			op = op + "="
+			tokener.Pop()
+		}
+	}
 	if isCmpOp(op) == false {
 		return nil, ErrInvalidStat
 	}
 	singleExp.CmpOp = op
-	tokener.Pop()
 
 	value, err := tokener.Peek()
 	if err != nil {
@@ -652,7 +664,7 @@ func isLogicOp(op string) bool {
 }
 
 func isAggFunc(name string) bool {
-	return name == "count" || name == "sum" || name == "avg"
+	return name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max"
 }
 
 func isType(tp string) bool {
@@ -664,7 +676,7 @@ func isName(name string) bool {
 }
 
 func isCmpOp(op string) bool {
-	return op == "=" || op == ">" || op == "<"
+	return op == "=" || op == ">" || op == "<" || op == "!=" || op == "<=" || op == ">="
 }
 
 func parseBegin(tokener *tokener) (*statement.Begin, error) {
