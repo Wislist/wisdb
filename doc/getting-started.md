@@ -29,13 +29,26 @@ First use creates four files (`.db`, `.log`, `.xid`, `.bt`) at the given path:
 
 ## Start Server
 
+All configuration is via CLI flags. No config file needed.
+
 ```bash
-# Default: port 3307, 64MB memory cache
+# Default: port 3307, 64MB memory cache, TCP
 ./wisdb-server -open /path/to/mydb
 
 # Custom memory (supports KB, MB, GB)
 ./wisdb-server -open /path/to/mydb -mem 128MB
+
+# Custom network and address
+./wisdb-server -open /path/to/mydb -net tcp -addr :3307
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `-open` | (required) | Path to existing database |
+| `-create` | (required) | Path to create new database |
+| `-mem` | `64MB` | Memory limit for page cache |
+| `-net` | `tcp` | Network protocol |
+| `-addr` | `:3307` | Listen address |
 
 Press `Ctrl+C` for graceful shutdown.
 

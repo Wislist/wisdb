@@ -14,6 +14,8 @@ Persists transaction states (active/committed/aborted) in `.xid` file. Assigns m
 
 Manages 8KB pages in `.db` file with LRU page cache via Cacher. Implements WAL (Write-Ahead Log) with checksum validation in `.log` file. Crash recovery replays logs: committed transactions are redone, active ones are undone. Validates database integrity via page1 VC (valid check) mechanism.
 
+All DM-layer functions return errors instead of panicing — callers propagate errors up to the server for graceful handling.
+
 ### SM — Serializability Manager
 
 Implements MVCC: each entry stores XMIN (creator) and XMAX (deleter) for visibility checks. Supports two isolation levels:
@@ -28,11 +30,11 @@ B+Tree implementation inspired by boltDB. Each tree has a boot UUID pointing to 
 
 ### TBM — Table Manager
 
-Table schemas are stored as a linked list in the database, chained via booter. Each field optionally has a B+Tree index. Translates SQL WHERE conditions into index range scans, merging intervals for AND/OR logic.
+Table schemas are stored as a linked list in the database, chained via booter. Each field optionally has a B+Tree index. Translates SQL WHERE conditions into index range scans, merging intervals for AND/OR logic. For unindexed fields, falls back to full table scan via `fullScanFilter`. Supports ORDER BY (asc/desc), LIMIT/OFFSET, and aggregate functions (COUNT, SUM, AVG).
 
 ### Parser
 
-Custom tokenizer-based SQL parser. Supports DDL (create/drop/show), DML (insert/read/update/delete), and transaction control (begin/commit/abort). WHERE clauses support up to 2 conditions with AND/OR.
+Custom tokenizer-based SQL parser. Supports DDL (create/drop/show), DML (insert/read/update/delete), aggregates (count/sum/avg), ORDER BY, LIMIT/OFFSET, and transaction control (begin/commit/abort). WHERE clauses support up to 2 conditions with AND/OR. Accepts `select` as an alias for `read`.
 
 ### Transporter
 
@@ -42,7 +44,7 @@ Dual protocol support:
 
 ### Client
 
-Interactive shell with readline-style input, plus programmatic Go API. Features connection pooling, auto-reconnect on disconnect, and transaction API (`Begin`/`Commit`/`Rollback`).
+Interactive shell with readline-style input (raw terminal mode, command history, arrow key navigation), plus programmatic Go API. Features connection pooling, auto-reconnect on disconnect, and transaction API (`Begin`/`Commit`/`Rollback`).
 
 ## Data Flow
 
@@ -51,11 +53,17 @@ Client SQL → Wire/Hex Encode → TCP Send
                                         ↓
                               Server Accept → Parser → Executor
                                         ↓
-                              TBM (table lookup, index scan)
+                              TBM (table lookup, index scan / full scan)
                                         ↓
                               SM (MVCC visibility, lock acquire)
                                         ↓
                               DM (page cache, WAL logging, disk I/O)
                                         ↓
-                              Result → Wire/Hex Encode → TCP Send → Client
+                              Result → ORDER BY / LIMIT / Aggregates
+                                        ↓
+                              Wire/Hex Encode → TCP Send → Client
 ```
+
+## Error Handling
+
+All layers return errors instead of panicing for recoverable failures. The server catches and reports errors with context (e.g., "table user: field 'email' not found — available fields: id, name, age"). Catastrophic errors (disk I/O failure during recovery) still panic as they indicate unrecoverable state.
