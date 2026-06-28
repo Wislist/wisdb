@@ -71,11 +71,11 @@ func runConnect(cmd *cobra.Command, args []string) error {
 }
 
 func dial(network, addr string) transporter.Packager {
-	fmt.Printf("Connecting to %s://%s ...\n", network, addr)
+	fmt.Printf("Connecting to %s://%s ...\r\n", network, addr)
 	for {
 		conn, err := net.Dial(network, addr)
 		if err == nil {
-			fmt.Printf("Connected to %s\n", addr)
+			fmt.Printf("Connected to %s\r\n", addr)
 			pro := transporter.NewWireProtocoler()
 			trs := transporter.NewWireTransporter(conn)
 			return transporter.NewPackager(trs, pro)
