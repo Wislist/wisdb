@@ -2,6 +2,7 @@ package tbm
 
 import (
 	"errors"
+	"mydb/src/main/backend/im"
 	"fmt"
 	"sort"
 	"strings"
@@ -26,10 +27,12 @@ type table struct {
 	TBM      *tableManager
 	SelfUUID utils.UUID
 
-	Name   string
-	status byte
-	Next   utils.UUID
-	fields []*field
+	Name     string
+	status   byte
+	Next     utils.UUID
+	fields   []*field
+	rowIndex   utils.UUID // hidden B+Tree UUID (persisted)
+	rowIndexBt im.BPlusTree // hidden B+Tree instance (loaded in memory)
 }
 
 /*
@@ -51,6 +54,13 @@ func LoadTable(tbm *tableManager, uuid utils.UUID) *table {
 	}
 
 	tb.parseSelf(raw)
+
+	// Load the hidden row index B+Tree
+	tb.rowIndexBt, err = im.Load(tb.rowIndex, tb.TBM.DM)
+	if err != nil {
+		panic(err)
+	}
+
 	return tb
 }
 
@@ -78,7 +88,6 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 		Next: next,
 	}
 
-	hasUserIndex := len(create.Index) > 0
 	for i := 0; i < len(create.FieldName); i++ {
 		fname := create.FieldName[i]
 		ftype := create.FieldType[i]
@@ -89,11 +98,6 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 				break
 			}
 		}
-		// If no user-specified indexes, auto-index the first field so that
-		// full table scans (WHERE on unindexed fields) have a B+Tree to walk.
-		if !hasUserIndex && i == 0 {
-			indexed = true
-		}
 		// 表结构元数据用 SUPER_XID 写入，避免 Undo 时破坏表结构
 		field, err := CreateField(tb, tm.SUPER_XID, fname, ftype, indexed)
 		if err != nil {
@@ -102,8 +106,21 @@ func CreateTable(tbm *tableManager, next utils.UUID, xid tm.XID, create *stateme
 		tb.fields = append(tb.fields, field)
 	}
 
+	// Create hidden row index for full table scans (like InnoDB hidden row_id).
+	// Every table has this B+Tree; it stores row UUID → row UUID so that
+	// fullScanFilter can walk it to enumerate all rows.
+	rowIdx, err := im.Create(tb.TBM.DM)
+	if err != nil {
+		return nil, err
+	}
+	tb.rowIndex = rowIdx
+	tb.rowIndexBt, err = im.Load(rowIdx, tb.TBM.DM)
+	if err != nil {
+		return nil, err
+	}
+
 	// 表元数据同样用 SUPER_XID 写入
-	err := tb.persistSelf(tm.SUPER_XID)
+	err = tb.persistSelf(tm.SUPER_XID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +172,8 @@ func (t *table) Delete(xid tm.XID, delete *statement.Delete) (int, error) {
 			return 0, err
 		}
 		if ok {
+			// Hidden row index is append-only — deleted rows are naturally
+			// filtered by the visibility check in fullScanFilter.
 			count++
 		}
 	}
@@ -197,12 +216,19 @@ func (t *table) Update(xid tm.XID, update *statement.Update) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		// Hidden row index is append-only; the old entry is naturally
+		// filtered by visibility checks.
 
 		e := t.parseEntry(raw) // 读取并解析entry
 		e[fd.FName] = v        // 更新entry
 		raw = t.entryToRaw(e)  // 将新entry存储进DB
 		uuid, err = t.TBM.SM.Insert(xid, raw)
 		if err != nil {
+			return 0, err
+		}
+
+		// Add new row to hidden index
+		if err := t.rowIndexBt.Insert(uuid, uuid); err != nil {
 			return 0, err
 		}
 
@@ -349,22 +375,11 @@ func (t *table) calWhere(fd *field, where *statement.Where) (l0, r0, l1, r1 util
 	}
 	return
 }
-// fullScanFilter performs a full table scan (via any indexed field) and filters rows in memory
-// against the WHERE condition. Used when the queried field has no index.
+// fullScanFilter performs a full table scan via the hidden row index and filters rows
+// in memory against the WHERE condition. Used when the queried field has no index.
 func (t *table) fullScanFilter(xid tm.XID, where *statement.Where) ([]utils.UUID, error) {
-	// Find any indexed field to scan all rows
-	var scanField *field
-	for _, f := range t.fields {
-		if f.IsIndexed() {
-			scanField = f
-			break
-		}
-	}
-	if scanField == nil {
-		return nil, errors.New("internal error: table has no indexed fields — this should not happen as the first field is always indexed")
-	}
-
-	allUUIDs, err := scanField.Search(0, utils.INF)
+	// Walk the hidden row index (like InnoDB hidden row_id) to enumerate all rows
+	allUUIDs, err := t.rowIndexBt.SearchRange(0, utils.INF)
 	if err != nil {
 		return nil, err
 	}
@@ -530,6 +545,12 @@ func (t *table) Insert(xid tm.XID, insert *statement.Insert) error {
 			}
 		}
 	}
+
+	// Insert into hidden row index for full table scans
+	if err := t.rowIndexBt.Insert(uuid, uuid); err != nil {
+		return err
+	}
+
 	return nil
 }
 
