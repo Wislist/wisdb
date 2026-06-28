@@ -35,7 +35,7 @@ var (
 )
 
 func openDB(path string, cfg *config.Config, mem int64) {
-	tm0 := tm.Open(path)
+	tm0, _ := tm.Open(path)
 	dm0, err := dm.Open(path, mem, tm0)
 	if err != nil {
 		utils.Fatal("Failed to open DM:", err)
@@ -68,7 +68,7 @@ func createDB(path string, cfg *config.Config) {
 	if dbExists(path) {
 		panic(ErrDBExists)
 	}
-	tm := tm.Create(path)
+	tm, _ := tm.Create(path)
 	dm, err := dm.Create(path, _DEFAULT_MEM, tm)
 	if err != nil {
 		panic(err)

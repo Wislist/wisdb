@@ -45,28 +45,28 @@ type transactionManager struct {
 	counterLock sync.Mutex
 }
 
-func Create(path string) *transactionManager {
+func Create(path string) (*transactionManager, error) {
 	file, err := os.OpenFile(path+XID_SUFFIX, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	xidCounterInit := make([]byte, LEN_XID)
 	_, err = file.WriteAt(xidCounterInit, 0)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return newTransactionManager(file)
+	return newTransactionManager(file), nil
 }
 
-func Open(path string) *transactionManager {
+func Open(path string) (*transactionManager, error) {
 	file, err := os.OpenFile(path+XID_SUFFIX, os.O_RDWR, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return newTransactionManager(file)
+	return newTransactionManager(file), nil
 }
 
 func newTransactionManager(file *os.File) *transactionManager {

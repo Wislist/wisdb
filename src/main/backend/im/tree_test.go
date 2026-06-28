@@ -25,7 +25,7 @@ func TestBPlusTreeConcurrentInsertAndSearch(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "im_concurrent")
 	mem := int64(pcacher.PAGE_SIZE * 80)
 
-	tm0 := tm.Create(base)
+	tm0, _ := tm.Create(base)
 	dm0, _ := dm.Create(base, mem, tm0)
 	defer func() {
 		dm0.Close()
@@ -100,7 +100,7 @@ func TestBPlusTreeLifecycleStability(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "im_lifecycle")
 	mem := int64(pcacher.PAGE_SIZE * 120)
 
-	tm0 := tm.Create(base)
+	tm0, _ := tm.Create(base)
 	dm0, _ := dm.Create(base, mem, tm0)
 
 	bootUUID, err := Create(dm0)
@@ -146,7 +146,7 @@ func TestBPlusTreeLifecycleStability(t *testing.T) {
 	dm0.Close()
 	tm0.Close()
 
-	tm1 := tm.Open(base)
+	tm1, _ := tm.Open(base)
 	dm1, _ := dm.Open(base, mem, tm1)
 	defer func() {
 		dm1.Close()

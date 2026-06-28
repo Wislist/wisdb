@@ -39,7 +39,7 @@ func TestTableManagerLifecycle(t *testing.T) {
 	mem := int64(pcacher.PAGE_SIZE * 80)
 	createBooterFile(t, base)
 
-	tm0 := tm.Create(base)
+	tm0, _ := tm.Create(base)
 	dm0, _ := dm.Create(base, mem, tm0)
 	sm0 := sm.NewSerializabilityManager(tm0, dm0)
 	tbm0 := Create(base, sm0, dm0)
@@ -193,7 +193,7 @@ func TestTableManagerLifecycle(t *testing.T) {
 	dm0.Close()
 	tm0.Close()
 
-	tm1 := tm.Open(base)
+	tm1, _ := tm.Open(base)
 	dm1, _ := dm.Open(base, mem, tm1)
 	sm1 := sm.NewSerializabilityManager(tm1, dm1)
 	tbm1 := Open(base, sm1, dm1)
